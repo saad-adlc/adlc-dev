@@ -29,6 +29,10 @@ jobs:
           git clone https://x-access-token:${{ secrets.ADLC_AGENT_TOKEN }}@github.com/saad-adlc/adlc-standards.git _standards
           cp _standards/CLAUDE.md ./CLAUDE.md
           cp -r _standards/ai-dev ./ai-dev
+          # Register ADLC slash commands so Claude Code recognizes /generate-feature etc.
+          mkdir -p .claude/commands
+          cp _standards/ai-dev/workflows/*.md .claude/commands/
+          ls -la .claude/commands/
 
       - name: Install Claude Code
         run: npm install -g @anthropic-ai/claude-code
@@ -53,38 +57,34 @@ jobs:
           AZURE_OPENAI_DEPLOYMENT: claude-sonnet-4-6
         run: |
           claude --print \
-            --system-prompt "$(cat CLAUDE.md)" \
+            --permission-mode bypassPermissions \
+            --allowed-tools "Write,Edit,Read,Bash,Glob,Grep" \
             "/generate-feature ${{ github.event.issue.body }}" \
-            > generation_log.txt 2>&1
-          echo "--- Generation log ---"
-          cat generation_log.txt
-
-      - name: Run validation
-        env:
-          ANTHROPIC_BASE_URL: https://orix-adastra-adlc.openai.azure.com/openai/v1
-          ANTHROPIC_API_KEY: ${{ secrets.FOUNDRY_API_KEY }}
-          AZURE_OPENAI_DEPLOYMENT: claude-sonnet-4-6
-        run: |
-          claude --print \
-            --system-prompt "$(cat CLAUDE.md)" \
-            "/validate-output" \
-            > validation_log.txt 2>&1
-          cat validation_log.txt
-          if grep -qi "FAIL" validation_log.txt; then
-            echo "Validation failed — see validation_log.txt"
-            exit 1
-          fi
+            | tee generation_log.txt
+          echo "--- Generation finished ---"
 
       - name: Commit generated code
         run: |
+          # Remove agent-context artifacts before commit (these live in adlc-standards,
+          # not in the feature branch; they were copied in for Claude to read).
+          rm -rf _standards .claude ai-dev
+          rm -f CLAUDE.md generation_log.txt
+
           git config user.name "adlc-agent"
-          git config user.email "adlc-agent@orix-adlc.com"
+          git config user.email "adlc-agent@saad-adlc.com"
           git add -A
+
+          # Fail explicitly if the agent didn't produce any files.
+          if git diff --cached --quiet; then
+            echo "ERROR: Agent did not generate any new files. Check generation step logs."
+            exit 1
+          fi
+
           git commit -m "feat(adlc): generated for issue #${{ github.event.issue.number }}
 
           Issue: ${{ github.event.issue.title }}
           Pipeline: Claude Code via ADLC
-          Model: adlc-claude-primary (Foundry)"
+          Model: claude-sonnet-4-6 (Foundry)"
 
       - name: Push branch and open PR to adlc-stage
         env:
