@@ -39,27 +39,25 @@ jobs:
 
       - name: Run iteration agent
         env:
-          ANTHROPIC_BASE_URL: https://orix-adastra-adlc.openai.azure.com/openai/v1
-          ANTHROPIC_API_KEY: ${{ secrets.FOUNDRY_API_KEY }}
-          AZURE_OPENAI_DEPLOYMENT: claude-sonnet-4-6
+          ANTHROPIC_BASE_URL: https://orix-adastra-adlc.services.ai.azure.com/anthropic
+          ANTHROPIC_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           FEEDBACK=$(cat pr_feedback.json)
-          claude --print \
-            --system-prompt "$(cat CLAUDE.md)" \
-            "/iterate ${{ github.event.pull_request.number }} ${FEEDBACK}" \
-            > iteration_log.txt 2>&1
-          cat iteration_log.txt
+          printf '/iterate %s %s\n' "$PR_NUMBER" "$FEEDBACK" | claude --print \
+            --permission-mode bypassPermissions \
+            --allowed-tools "Write,Edit,Read,Bash,Glob,Grep" \
+            | tee iteration_log.txt
 
       - name: Validate iteration
         env:
-          ANTHROPIC_BASE_URL: https://orix-adastra-adlc.openai.azure.com/openai/v1
-          ANTHROPIC_API_KEY: ${{ secrets.FOUNDRY_API_KEY }}
-          AZURE_OPENAI_DEPLOYMENT: claude-sonnet-4-6
+          ANTHROPIC_BASE_URL: https://orix-adastra-adlc.services.ai.azure.com/anthropic
+          ANTHROPIC_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
         run: |
-          claude --print \
-            --system-prompt "$(cat CLAUDE.md)" \
-            "/validate-output" \
-            > validation_log.txt 2>&1
+          echo "/validate-output" | claude --print \
+            --permission-mode bypassPermissions \
+            --allowed-tools "Read,Bash,Glob,Grep" \
+            | tee validation_log.txt
           grep -qi "FAIL" validation_log.txt && exit 1 || true
 
       - name: Commit and push iteration
