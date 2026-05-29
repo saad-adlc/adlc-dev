@@ -48,9 +48,9 @@ jobs:
 
       - name: Run generation agent
         env:
-          ANTHROPIC_BASE_URL: https://adlc-foundry-dev.openai.azure.com/
+          ANTHROPIC_BASE_URL: https://orix-adastra-adlc.openai.azure.com/openai/v1
           ANTHROPIC_API_KEY: ${{ secrets.FOUNDRY_API_KEY }}
-          AZURE_OPENAI_DEPLOYMENT: adlc-claude-primary
+          AZURE_OPENAI_DEPLOYMENT: claude-sonnet-4-6
         run: |
           claude --print \
             --system-prompt "$(cat CLAUDE.md)" \
@@ -61,9 +61,9 @@ jobs:
 
       - name: Run validation
         env:
-          ANTHROPIC_BASE_URL: https://adlc-foundry-dev.openai.azure.com/
+          ANTHROPIC_BASE_URL: https://orix-adastra-adlc.openai.azure.com/openai/v1
           ANTHROPIC_API_KEY: ${{ secrets.FOUNDRY_API_KEY }}
-          AZURE_OPENAI_DEPLOYMENT: adlc-claude-primary
+          AZURE_OPENAI_DEPLOYMENT: claude-sonnet-4-6
         run: |
           claude --print \
             --system-prompt "$(cat CLAUDE.md)" \
