@@ -34,7 +34,6 @@ jobs:
           GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
         run: |
           gh pr view ${{ github.event.pull_request.number }} \
-            --repo saad-adlc/adlc-stage \
             --json reviews,comments,body \
             > pr_feedback.json
 
@@ -77,5 +76,4 @@ jobs:
           GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
         run: |
           gh pr comment ${{ github.event.pull_request.number }} \
-            --repo saad-adlc/adlc-stage \
             --body "✅ Iteration complete. New commit pushed — please re-review."

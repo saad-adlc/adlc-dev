@@ -92,15 +92,14 @@ jobs:
         run: |
           git push origin ${{ steps.branch.outputs.name }}
           gh pr create \
-            --repo saad-adlc/adlc-stage \
-            --head saad-adlc/adlc-dev:${{ steps.branch.outputs.name }} \
+            --head ${{ steps.branch.outputs.name }} \
             --base main \
             --title "feat: ${{ github.event.issue.title }}" \
             --label adlc-generated \
             --body "## ADLC Generated PR
 
-          **Source issue:** saad-adlc/adlc-dev#${{ github.event.issue.number }}
-          **Model:** adlc-claude-primary (Microsoft Foundry)
+          **Source issue:** #${{ github.event.issue.number }}
+          **Model:** claude-sonnet-4-6 (Microsoft Foundry)
           **Validation:** passed
 
           ### Feature request
