@@ -23,10 +23,11 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Pull latest CLAUDE.md
+      - name: Pull latest standards (CLAUDE.md + ai-dev/) from adlc-standards
         run: |
           git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/saad-adlc/adlc-standards.git _standards
           cp _standards/CLAUDE.md ./CLAUDE.md
+          cp -r _standards/ai-dev ./ai-dev
 
       - name: Collect PR feedback
         env:

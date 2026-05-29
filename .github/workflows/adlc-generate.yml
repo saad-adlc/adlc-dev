@@ -24,10 +24,11 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Pull latest CLAUDE.md from adlc-standards
+      - name: Pull latest standards (CLAUDE.md + ai-dev/) from adlc-standards
         run: |
           git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/saad-adlc/adlc-standards.git _standards
           cp _standards/CLAUDE.md ./CLAUDE.md
+          cp -r _standards/ai-dev ./ai-dev
 
       - name: Install Claude Code
         run: npm install -g @anthropic-ai/claude-code
