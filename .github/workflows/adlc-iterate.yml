@@ -1,0 +1,80 @@
+# Deviations from PLAN.md (Task 2.2):
+#   - Key Vault step removed; Foundry key + agent token read directly from
+#     GitHub Actions secrets (FOUNDRY_API_KEY, GITHUB_AGENT_TOKEN) for the
+#     personal-GitHub POC.
+name: ADLC — Iterate on Feedback
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  iterate:
+    if: contains(github.event.pull_request.labels.*.name, 'adlc-iterate')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull latest CLAUDE.md
+        run: |
+          git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/saad-adlc/adlc-standards.git _standards
+          cp _standards/CLAUDE.md ./CLAUDE.md
+
+      - name: Collect PR feedback
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_AGENT_TOKEN }}
+        run: |
+          gh pr view ${{ github.event.pull_request.number }} \
+            --repo saad-adlc/adlc-stage \
+            --json reviews,comments,body \
+            > pr_feedback.json
+
+      - name: Run iteration agent
+        env:
+          ANTHROPIC_BASE_URL: https://adlc-foundry-dev.openai.azure.com/
+          ANTHROPIC_API_KEY: ${{ secrets.FOUNDRY_API_KEY }}
+          AZURE_OPENAI_DEPLOYMENT: adlc-claude-primary
+        run: |
+          FEEDBACK=$(cat pr_feedback.json)
+          claude --print \
+            --system-prompt "$(cat CLAUDE.md)" \
+            "/iterate ${{ github.event.pull_request.number }} ${FEEDBACK}" \
+            > iteration_log.txt 2>&1
+          cat iteration_log.txt
+
+      - name: Validate iteration
+        env:
+          ANTHROPIC_BASE_URL: https://adlc-foundry-dev.openai.azure.com/
+          ANTHROPIC_API_KEY: ${{ secrets.FOUNDRY_API_KEY }}
+          AZURE_OPENAI_DEPLOYMENT: adlc-claude-primary
+        run: |
+          claude --print \
+            --system-prompt "$(cat CLAUDE.md)" \
+            "/validate-output" \
+            > validation_log.txt 2>&1
+          grep -qi "FAIL" validation_log.txt && exit 1 || true
+
+      - name: Commit and push iteration
+        run: |
+          git config user.name "adlc-agent"
+          git config user.email "adlc-agent@orix-adlc.com"
+          ITER=$(git log --oneline | grep -c "iteration" || echo 0)
+          git add -A
+          git commit -m "feat(adlc): iteration $((ITER+1)) — PR feedback addressed"
+          git push origin HEAD
+
+      - name: Comment on PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_AGENT_TOKEN }}
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --repo saad-adlc/adlc-stage \
+            --body "✅ Iteration complete. New commit pushed — please re-review."
