@@ -61,7 +61,7 @@ jobs:
           # Pipe prompt via stdin to avoid bash arg-quoting issues with multi-line bodies.
           # --model must match a deployment in this Foundry resource (default Opus is not deployed here).
           printf '/generate-feature %s\n' "$ISSUE_BODY" | claude --print \
-            --model claude-sonnet-4-6 \
+            --model claude-opus-4-8 \
             --permission-mode bypassPermissions \
             --allowed-tools "Write,Edit,Read,Bash,Glob,Grep" \
             | tee generation_log.txt
