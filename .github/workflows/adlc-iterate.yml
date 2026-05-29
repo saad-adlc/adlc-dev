@@ -39,24 +39,28 @@ jobs:
 
       - name: Run iteration agent
         env:
-          ANTHROPIC_BASE_URL: https://orix-adastra-adlc.services.ai.azure.com/anthropic
-          ANTHROPIC_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+          CLAUDE_CODE_USE_FOUNDRY: "1"
+          ANTHROPIC_FOUNDRY_RESOURCE: orix-adastra-adlc
+          ANTHROPIC_FOUNDRY_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+          ANTHROPIC_DEFAULT_SONNET_MODEL: claude-sonnet-4-6
+          ANTHROPIC_DEFAULT_OPUS_MODEL: claude-opus-4-8
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           FEEDBACK=$(cat pr_feedback.json)
           printf '/iterate %s %s\n' "$PR_NUMBER" "$FEEDBACK" | claude --print \
-            --model claude-opus-4-8 \
             --permission-mode bypassPermissions \
             --allowed-tools "Write,Edit,Read,Bash,Glob,Grep" \
             | tee iteration_log.txt
 
       - name: Validate iteration
         env:
-          ANTHROPIC_BASE_URL: https://orix-adastra-adlc.services.ai.azure.com/anthropic
-          ANTHROPIC_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+          CLAUDE_CODE_USE_FOUNDRY: "1"
+          ANTHROPIC_FOUNDRY_RESOURCE: orix-adastra-adlc
+          ANTHROPIC_FOUNDRY_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+          ANTHROPIC_DEFAULT_SONNET_MODEL: claude-sonnet-4-6
+          ANTHROPIC_DEFAULT_OPUS_MODEL: claude-opus-4-8
         run: |
           echo "/validate-output" | claude --print \
-            --model claude-opus-4-8 \
             --permission-mode bypassPermissions \
             --allowed-tools "Read,Bash,Glob,Grep" \
             | tee validation_log.txt

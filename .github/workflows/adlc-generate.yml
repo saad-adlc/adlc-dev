@@ -34,8 +34,10 @@ jobs:
           cp _standards/ai-dev/workflows/*.md .claude/commands/
           ls -la .claude/commands/
 
-      - name: Install Claude Code
-        run: npm install -g @anthropic-ai/claude-code
+      - name: Install Claude Code (native installer per Microsoft Foundry docs)
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Create feature branch
         id: branch
@@ -52,16 +54,18 @@ jobs:
 
       - name: Run generation agent
         env:
-          # Anthropic-native Foundry endpoint (NOT the OpenAI-compatible one).
-          # SDK auto-appends /v1/messages to this base URL.
-          ANTHROPIC_BASE_URL: https://orix-adastra-adlc.services.ai.azure.com/anthropic
-          ANTHROPIC_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+          # Per Microsoft Foundry docs (learn.microsoft.com/.../configure-claude-code).
+          # CLAUDE_CODE_USE_FOUNDRY=1 makes the CLI handle Foundry protocol details
+          # internally (including which beta headers to send to Foundry's gateway).
+          CLAUDE_CODE_USE_FOUNDRY: "1"
+          ANTHROPIC_FOUNDRY_RESOURCE: orix-adastra-adlc
+          ANTHROPIC_FOUNDRY_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+          ANTHROPIC_DEFAULT_SONNET_MODEL: claude-sonnet-4-6
+          ANTHROPIC_DEFAULT_OPUS_MODEL: claude-opus-4-8
           ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
           # Pipe prompt via stdin to avoid bash arg-quoting issues with multi-line bodies.
-          # --model must match a deployment in this Foundry resource (default Opus is not deployed here).
           printf '/generate-feature %s\n' "$ISSUE_BODY" | claude --print \
-            --model claude-opus-4-8 \
             --permission-mode bypassPermissions \
             --allowed-tools "Write,Edit,Read,Bash,Glob,Grep" \
             | tee generation_log.txt
