@@ -55,11 +55,12 @@ jobs:
           ANTHROPIC_BASE_URL: https://orix-adastra-adlc.openai.azure.com/openai/v1
           ANTHROPIC_API_KEY: ${{ secrets.FOUNDRY_API_KEY }}
           AZURE_OPENAI_DEPLOYMENT: claude-sonnet-4-6
+          ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
           claude --print \
             --permission-mode bypassPermissions \
             --allowed-tools "Write,Edit,Read,Bash,Glob,Grep" \
-            "/generate-feature ${{ github.event.issue.body }}" \
+            "/generate-feature $ISSUE_BODY" \
             | tee generation_log.txt
           echo "--- Generation finished ---"
 
