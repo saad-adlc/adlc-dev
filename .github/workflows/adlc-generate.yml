@@ -52,6 +52,21 @@ jobs:
           git checkout -b "$BRANCH"
           echo "name=$BRANCH" >> $GITHUB_OUTPUT
 
+      - name: Fetch latest issue context
+        # Always read the issue live via the API. The github.event payload is a
+        # snapshot taken at trigger time and lags behind edits/comments (the
+        # stale-body bug). This also pulls the full comment thread so the agent
+        # has the running conversation when the user answers its questions.
+        env:
+          GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
+        run: |
+          gh issue view ${{ github.event.issue.number }} \
+            --repo ${{ github.repository }} \
+            --json body,comments \
+            --jq '"# Issue body\n" + .body + "\n\n# Comments\n" + ([.comments[] | "## \(.author.login):\n\(.body)"] | join("\n\n"))' \
+            > issue_context.txt
+          echo "--- Issue context fetched ---"
+
       - name: Run generation agent
         env:
           # Per Microsoft Foundry docs (learn.microsoft.com/.../configure-claude-code).
@@ -62,31 +77,54 @@ jobs:
           ANTHROPIC_FOUNDRY_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
           ANTHROPIC_DEFAULT_SONNET_MODEL: claude-sonnet-4-6
           ANTHROPIC_DEFAULT_OPUS_MODEL: claude-opus-4-8
-          ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
-          # Pipe prompt via stdin to avoid bash arg-quoting issues with multi-line bodies.
-          printf '/generate-feature %s\n' "$ISSUE_BODY" | claude --print \
+          # Pipe prompt via stdin to avoid bash arg-quoting issues with multi-line
+          # bodies. Feed the live issue body + full comment thread (fetched above),
+          # not the event-payload snapshot, so re-runs see the user's answers.
+          printf '/generate-feature %s\n' "$(cat issue_context.txt)" | claude --print \
             --permission-mode bypassPermissions \
             --allowed-tools "Write,Edit,Read,Bash,Glob,Grep" \
             | tee generation_log.txt
           echo "--- Generation finished ---"
 
+      - name: Post agent response as issue comment
+        # Always post the agent's output back to the issue — both when it asks
+        # clarifying questions (conversation loop) and when it generates code
+        # (audit trail). Runs before the commit step, which deletes the log.
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
+        run: |
+          if [ -s generation_log.txt ]; then
+            gh issue comment ${{ github.event.issue.number }} \
+              --repo ${{ github.repository }} \
+              --body-file generation_log.txt
+          else
+            echo "No generation_log.txt to post (agent step may not have run)."
+          fi
+
       - name: Commit generated code
+        id: commit
         run: |
           # Remove agent-context artifacts before commit (these live in adlc-standards,
           # not in the feature branch; they were copied in for Claude to read).
           rm -rf _standards .claude ai-dev
-          rm -f CLAUDE.md generation_log.txt
+          rm -f CLAUDE.md generation_log.txt issue_context.txt
 
           git config user.name "adlc-agent"
           git config user.email "adlc-agent@saad-adlc.com"
           git add -A
 
-          # Fail explicitly if the agent didn't produce any files.
+          # No files = the agent asked clarifying questions instead of coding.
+          # That's a valid conversation-loop outcome, not a failure: exit clean
+          # so the run goes green. The question comment was already posted above;
+          # the user answers in a comment and re-toggles the label to continue.
           if git diff --cached --quiet; then
-            echo "ERROR: Agent did not generate any new files. Check generation step logs."
-            exit 1
+            echo "No code generated — agent asked clarifying questions. Exiting cleanly."
+            echo "committed=false" >> $GITHUB_OUTPUT
+            exit 0
           fi
+          echo "committed=true" >> $GITHUB_OUTPUT
 
           git commit -m "feat(adlc): generated for issue #${{ github.event.issue.number }}
 
@@ -95,6 +133,7 @@ jobs:
           Model: claude-sonnet-4-6 (Foundry)"
 
       - name: Push branch and open PR to adlc-stage
+        if: steps.commit.outputs.committed == 'true'
         env:
           GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
         run: |
