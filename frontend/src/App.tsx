@@ -1,8 +1,8 @@
-import HelloWorld from './components/hello-world/hello-world';
+import HelloWorldPage from './components/hello-world/hello-world-page';
 
-/** Root application component — renders HelloWorld as a smoke target. */
+/** Root application component — renders HelloWorldPage. */
 function App() {
-  return <HelloWorld />;
+  return <HelloWorldPage />;
 }
 
 export default App;
