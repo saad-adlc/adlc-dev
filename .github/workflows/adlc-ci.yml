@@ -1,11 +1,6 @@
-# Deviations from PLAN.md (Task 2.3):
-#   - Working directory updated from frontend/ → apps/orders-web/ to match
-#     the actual project structure.
-#   - Backend steps removed until a backend project exists under backend/.
-#   - Vitest invoked with --coverage.reporter=json-summary so the
-#     coverage-summary.json file the gate reads actually exists.
-#   - Banned-package grep tightened to "lodash": (with colon) so it no
-#     longer false-positives on the allowed lodash-es dependency.
+# CI scoped to workspaces/ — each workspace is self-contained.
+# Detects which workspace changed in the PR and runs CI only for that one.
+# Supports React/Vite workspaces today; Java/dotnet steps added when needed.
 name: ADLC — CI
 
 on:
@@ -13,8 +8,51 @@ on:
     branches: [main]
 
 jobs:
-  adlc-ci:
-    name: adlc-ci
+  detect-workspace:
+    name: Detect changed workspace
+    runs-on: ubuntu-latest
+    outputs:
+      workspace: ${{ steps.detect.outputs.workspace }}
+      stack: ${{ steps.detect.outputs.stack }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect workspace from changed files
+        id: detect
+        run: |
+          # Find the workspace directory from changed files
+          WORKSPACE=$(git diff --name-only origin/main...HEAD \
+            | grep '^workspaces/' \
+            | head -1 \
+            | cut -d'/' -f2)
+
+          if [ -z "$WORKSPACE" ]; then
+            echo "No workspace changes detected — skipping CI"
+            echo "workspace=" >> $GITHUB_OUTPUT
+            echo "stack=none" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "workspace=$WORKSPACE" >> $GITHUB_OUTPUT
+          echo "Detected workspace: $WORKSPACE"
+
+          # Detect stack from workspace contents
+          if [ -f "workspaces/$WORKSPACE/package.json" ]; then
+            echo "stack=node" >> $GITHUB_OUTPUT
+          elif [ -f "workspaces/$WORKSPACE/pom.xml" ]; then
+            echo "stack=java" >> $GITHUB_OUTPUT
+          elif ls workspaces/$WORKSPACE/*.sln 2>/dev/null; then
+            echo "stack=dotnet" >> $GITHUB_OUTPUT
+          else
+            echo "stack=unknown" >> $GITHUB_OUTPUT
+          fi
+
+  ci-node:
+    name: CI — Node/React
+    needs: detect-workspace
+    if: needs.detect-workspace.outputs.stack == 'node'
     runs-on: ubuntu-latest
 
     steps:
@@ -25,44 +63,45 @@ jobs:
         with:
           node-version: '20'
           cache: npm
-          cache-dependency-path: apps/orders-web/package-lock.json
+          cache-dependency-path: workspaces/${{ needs.detect-workspace.outputs.workspace }}/package-lock.json
 
-      - name: Frontend — install
-        working-directory: apps/orders-web
+      - name: Install
+        working-directory: workspaces/${{ needs.detect-workspace.outputs.workspace }}
         run: npm ci
 
-      - name: Frontend — TypeScript check
-        working-directory: apps/orders-web
+      - name: TypeScript check
+        working-directory: workspaces/${{ needs.detect-workspace.outputs.workspace }}
         run: npx tsc --noEmit
 
-      - name: Frontend — lint
-        working-directory: apps/orders-web
+      - name: Lint
+        working-directory: workspaces/${{ needs.detect-workspace.outputs.workspace }}
         run: npx eslint . --max-warnings 0
 
-      - name: Frontend — test + coverage
-        working-directory: apps/orders-web
+      - name: Test + coverage
+        working-directory: workspaces/${{ needs.detect-workspace.outputs.workspace }}
         run: npm test -- --coverage --coverage.reporter=json-summary --coverage.reporter=text --reporter=verbose
 
-      - name: Frontend — coverage gate (80%)
-        working-directory: apps/orders-web
+      - name: Coverage gate (80%)
+        working-directory: workspaces/${{ needs.detect-workspace.outputs.workspace }}
         run: |
           PCT=$(cat coverage/coverage-summary.json | jq '.total.lines.pct')
           echo "Coverage: ${PCT}%"
           awk "BEGIN{ exit ($PCT < 80) }" || \
             (echo "❌ Coverage ${PCT}% below 80%" && exit 1)
 
-      - name: Secret scan
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Banned package check
+        working-directory: workspaces/${{ needs.detect-workspace.outputs.workspace }}
         run: |
           BANNED=('"moment":' '"lodash":')
           for pkg in "${BANNED[@]}"; do
-            if grep -r "$pkg" apps/orders-web/package.json 2>/dev/null; then
+            if grep "$pkg" package.json 2>/dev/null; then
               echo "❌ Banned package: $pkg"
               exit 1
             fi
           done
           echo "✅ No banned packages"
+
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
