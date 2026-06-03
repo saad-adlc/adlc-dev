@@ -1,0 +1,11 @@
+paths-ignore:
+  # Generated coverage reports — not source code
+  - "**/coverage/**"
+  # Vitest / Istanbul coverage helpers
+  - "**/coverage/sorter.js"
+  - "**/coverage/block-navigation.js"
+  # Build output
+  - "**/dist/**"
+  - "**/build/**"
+  # Dependencies
+  - "**/node_modules/**"
