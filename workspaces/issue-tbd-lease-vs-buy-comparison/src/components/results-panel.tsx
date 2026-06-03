@@ -1,21 +1,17 @@
 import { formatCurrency } from '../utils/format-currency';
 
 interface ResultsPanelProps {
+  monthlyLeasePayment: number;
   monthlyLoanPayment: number;
   totalLeaseCost: number;
   totalBuyCost: number;
   isValid: boolean;
 }
 
-/** Labels for each result row. */
-const RESULT_ROWS = [
-  { label: 'Monthly Loan Payment', leaseKey: null as null, buyKey: 'monthlyLoanPayment' as const },
-];
-
 type Winner = 'lease' | 'buy' | 'tie';
 
-/** Determines the cheaper option. */
-function getWinner(leaseCost: number, buyCost: number): Winner {
+/** Determines the cheaper option based on total cost. */
+export function getWinner(leaseCost: number, buyCost: number): Winner {
   if (leaseCost < buyCost) return 'lease';
   if (buyCost < leaseCost) return 'buy';
   return 'tie';
@@ -31,6 +27,7 @@ const WINNER_LABEL: Record<Winner, string> = {
  * Displays the side-by-side cost comparison results panel.
  */
 export default function ResultsPanel({
+  monthlyLeasePayment,
   monthlyLoanPayment,
   totalLeaseCost,
   totalBuyCost,
@@ -45,6 +42,8 @@ export default function ResultsPanel({
   }
 
   const winner = getWinner(totalLeaseCost, totalBuyCost);
+  const leaseSavings = totalBuyCost - totalLeaseCost;
+  const buySavings = totalLeaseCost - totalBuyCost;
 
   return (
     <div className="results-panel">
@@ -59,7 +58,7 @@ export default function ResultsPanel({
         <tbody>
           <tr>
             <td>Monthly Payment</td>
-            <td>{formatCurrency(monthlyLoanPayment > 0 ? 0 : 0)}—</td>
+            <td>{formatCurrency(monthlyLeasePayment)}</td>
             <td>{formatCurrency(monthlyLoanPayment)}</td>
           </tr>
           <tr className="results-table__total-row">
@@ -74,18 +73,14 @@ export default function ResultsPanel({
           <tr>
             <td>Net Savings vs Other Option</td>
             <td className={winner === 'lease' ? 'results-table__winner' : ''}>
-              {winner === 'lease'
-                ? `${formatCurrency(totalBuyCost - totalLeaseCost)} saved`
-                : winner === 'buy'
-                ? `${formatCurrency(totalLeaseCost - totalBuyCost)} more`
-                : '—'}
+              {winner === 'lease' && formatCurrency(leaseSavings) + ' saved'}
+              {winner === 'buy' && formatCurrency(buySavings) + ' more'}
+              {winner === 'tie' && '—'}
             </td>
             <td className={winner === 'buy' ? 'results-table__winner' : ''}>
-              {winner === 'buy'
-                ? `${formatCurrency(totalLeaseCost - totalBuyCost)} saved`
-                : winner === 'lease'
-                ? `${formatCurrency(totalBuyCost - totalLeaseCost)} more`
-                : '—'}
+              {winner === 'buy' && formatCurrency(buySavings) + ' saved'}
+              {winner === 'lease' && formatCurrency(leaseSavings) + ' more'}
+              {winner === 'tie' && '—'}
             </td>
           </tr>
         </tbody>
@@ -97,9 +92,4 @@ export default function ResultsPanel({
   );
 }
 
-// Re-export for testing
-export { getWinner };
 export type { Winner };
-
-// Suppress unused import warning — RESULT_ROWS is reserved for future expansion
-void RESULT_ROWS;
