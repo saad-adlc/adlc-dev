@@ -93,18 +93,15 @@ describe('calcTaxSavings', () => {
   it('reference scenario: single filer $80k income, no dependents', () => {
     // Validated against IRS 2025 tables and published SE calculators:
     // Net SE income: $80,000 * 0.9235 = $73,880
-    // SE tax: $73,880 * 0.153 = ~$11,303.64
-    // SE deduction: $11,303.64 * 0.5 = ~$5,651.82
-    // QBI deduction: $73,880 * 0.2 = ~$14,776 (net SE income as QBI base)
-    // Taxable income (with deductions): $80,000 - $5,651.82 - $14,776 - $15,000 = ~$44,572.18
-    // Federal income tax with deductions: ~$4,948
+    // SE tax: $73,880 * 0.153 = $11,303.64
+    // SE deduction: $11,303.64 * 0.5 = $5,651.82
+    // QBI deduction: $73,880 * 0.2 = $14,776.00
+    // Taxable income (with deductions): $80,000 - $5,651.82 - $14,776 - $15,000 = ~$44,572
     // Taxable income (without deductions): $80,000 - $15,000 = $65,000
-    // Federal income tax without deductions: ~$9,261
-    // Total savings = income tax saved + SE deduction value
     const result = calcTaxSavings(80000, 'single', 0);
-    expect(result.seTax).toBeCloseTo(11303, 0);
-    expect(result.seDeduction).toBeCloseTo(5652, 0);
-    expect(result.qbiDeduction).toBeCloseTo(14776, 0);
+    expect(result.seTax).toBeCloseTo(11303.64, 1);
+    expect(result.seDeduction).toBeCloseTo(5651.82, 1);
+    expect(result.qbiDeduction).toBeCloseTo(14776.00, 1);
     expect(result.totalSavings).toBeGreaterThan(3000);
     expect(result.totalSavings).toBeLessThan(8000);
   });
