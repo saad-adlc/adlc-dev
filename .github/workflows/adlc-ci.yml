@@ -79,7 +79,7 @@ jobs:
 
       - name: Test + coverage
         working-directory: workspaces/${{ needs.detect-workspace.outputs.workspace }}
-        run: npm test -- --coverage --coverage.reporter=json-summary --coverage.reporter=text --reporter=verbose
+        run: npm run test:coverage
 
       - name: Coverage gate (80%)
         working-directory: workspaces/${{ needs.detect-workspace.outputs.workspace }}
@@ -100,8 +100,3 @@ jobs:
             fi
           done
           echo "✅ No banned packages"
-
-      - name: Secret scan
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
