@@ -1,0 +1,19 @@
+# Dependencies
+**/node_modules/
+
+# Build outputs
+**/dist/
+**/build/
+
+# Test coverage — never commit generated coverage artifacts
+**/coverage/
+
+# Env files
+*.local
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
