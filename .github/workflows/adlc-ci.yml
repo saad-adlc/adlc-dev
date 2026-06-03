@@ -1,11 +1,11 @@
 # Deviations from PLAN.md (Task 2.3):
-#   - Vitest invoked with `--coverage.reporter=json-summary` so the
+#   - Working directory updated from frontend/ → apps/orders-web/ to match
+#     the actual project structure.
+#   - Backend steps removed until a backend project exists under backend/.
+#   - Vitest invoked with --coverage.reporter=json-summary so the
 #     coverage-summary.json file the gate reads actually exists.
-#   - Banned-package grep tightened to `"lodash":` (with colon) so it no
-#     longer false-positives on the allowed `lodash-es` dependency.
-#   - Moved from adlc-stage to adlc-dev when the pipeline collapsed to
-#     intra-repo PRs (cross-repo PRs require a fork relationship that
-#     personal-org accounts can't establish).
+#   - Banned-package grep tightened to "lodash": (with colon) so it no
+#     longer false-positives on the allowed lodash-es dependency.
 name: ADLC — CI
 
 on:
@@ -25,46 +25,31 @@ jobs:
         with:
           node-version: '20'
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Setup Java 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: temurin
-          cache: maven
+          cache-dependency-path: apps/orders-web/package-lock.json
 
       - name: Frontend — install
-        working-directory: frontend
+        working-directory: apps/orders-web
         run: npm ci
 
       - name: Frontend — TypeScript check
-        working-directory: frontend
+        working-directory: apps/orders-web
         run: npx tsc --noEmit
 
       - name: Frontend — lint
-        working-directory: frontend
+        working-directory: apps/orders-web
         run: npx eslint . --max-warnings 0
 
       - name: Frontend — test + coverage
-        working-directory: frontend
+        working-directory: apps/orders-web
         run: npm test -- --coverage --coverage.reporter=json-summary --coverage.reporter=text --reporter=verbose
 
       - name: Frontend — coverage gate (80%)
-        working-directory: frontend
+        working-directory: apps/orders-web
         run: |
           PCT=$(cat coverage/coverage-summary.json | jq '.total.lines.pct')
           echo "Coverage: ${PCT}%"
           awk "BEGIN{ exit ($PCT < 80) }" || \
             (echo "❌ Coverage ${PCT}% below 80%" && exit 1)
-
-      - name: Backend — compile
-        working-directory: backend
-        run: mvn compile -q
-
-      - name: Backend — test
-        working-directory: backend
-        run: mvn test -q
 
       - name: Secret scan
         uses: gitleaks/gitleaks-action@v2
@@ -75,7 +60,7 @@ jobs:
         run: |
           BANNED=('"moment":' '"lodash":')
           for pkg in "${BANNED[@]}"; do
-            if grep -r "$pkg" frontend/package.json 2>/dev/null; then
+            if grep -r "$pkg" apps/orders-web/package.json 2>/dev/null; then
               echo "❌ Banned package: $pkg"
               exit 1
             fi
