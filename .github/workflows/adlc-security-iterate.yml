@@ -1,0 +1,208 @@
+# ADLC — Security Auto-Iterate
+#
+# Triggers when a CodeQL code-scanning alert is created or reopened on a PR.
+# The agent reads the alert details, fixes the vulnerability on the feature
+# branch, validates, and pushes a new commit — closing the loop automatically.
+#
+# Iteration cap: 3 attempts per alert to prevent infinite loops.
+# If all 3 fail, the agent posts a comment and exits — a human must intervene.
+
+name: ADLC — Security Auto-Iterate
+
+on:
+  check_run:
+    types: [completed]
+
+jobs:
+  security-iterate:
+    # Only run when CodeQL check completes with failure on a PR branch
+    if: |
+      github.event.check_run.name == 'Analyze' &&
+      github.event.check_run.conclusion == 'failure' &&
+      github.event.check_run.pull_requests[0] != null
+
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      security-events: read
+
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.check_run.pull_requests[0].head.ref }}
+          token: ${{ secrets.ADLC_AGENT_TOKEN }}
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Claude Code
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Pull latest standards from adlc-standards
+        run: |
+          git clone https://x-access-token:${{ secrets.ADLC_AGENT_TOKEN }}@github.com/saad-adlc/adlc-standards.git _standards
+          cp _standards/CLAUDE.md ./CLAUDE.md
+          cp -r _standards/ai-dev ./ai-dev
+
+      - name: Check iteration count (cap at 3)
+        id: iteration_check
+        env:
+          GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
+        run: |
+          PR_NUMBER=${{ github.event.check_run.pull_requests[0].number }}
+          ITER=$(gh pr view "$PR_NUMBER" \
+            --repo ${{ github.repository }} \
+            --json commits \
+            --jq '[.commits[].messageHeadline | select(test("security-iteration"))] | length')
+          echo "count=${ITER}" >> $GITHUB_OUTPUT
+          echo "pr_number=${PR_NUMBER}" >> $GITHUB_OUTPUT
+          if [ "$ITER" -ge 3 ]; then
+            echo "capped=true" >> $GITHUB_OUTPUT
+          else
+            echo "capped=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Post cap-reached comment and exit
+        if: steps.iteration_check.outputs.capped == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
+        run: |
+          gh pr comment ${{ steps.iteration_check.outputs.pr_number }} \
+            --repo ${{ github.repository }} \
+            --body "⛔ **ADLC Security Auto-Iterate: iteration cap reached (3/3).**
+
+          The agent was unable to resolve the CodeQL alert after 3 attempts.
+
+          **Next steps:**
+          1. Review the [CodeQL alerts](${{ github.server_url }}/${{ github.repository }}/security/code-scanning)
+          2. Fix manually and push to this branch
+          3. Tag \`@adastra-team\` if you need help"
+          exit 0
+
+      - name: Collect CodeQL alerts for this PR
+        if: steps.iteration_check.outputs.capped == 'false'
+        id: collect_alerts
+        env:
+          GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
+        run: |
+          PR_NUMBER=${{ steps.iteration_check.outputs.pr_number }}
+          PR_HEAD_SHA=${{ github.event.check_run.pull_requests[0].head.sha }}
+
+          # Fetch open code-scanning alerts on this ref
+          gh api \
+            "/repos/${{ github.repository }}/code-scanning/alerts?ref=$PR_HEAD_SHA&state=open&per_page=20" \
+            > codeql_alerts.json
+
+          ALERT_COUNT=$(jq 'length' codeql_alerts.json)
+          echo "alert_count=${ALERT_COUNT}" >> $GITHUB_OUTPUT
+
+          # Build a readable summary for the agent
+          jq -r '.[] | "ALERT \(.number): [\(.rule.severity | ascii_upcase)] \(.rule.description)\nFile: \(.most_recent_instance.location.path) line \(.most_recent_instance.location.start_line)\nMessage: \(.most_recent_instance.message.text)\n"' \
+            codeql_alerts.json > alert_summary.txt
+
+          echo "--- Alerts fetched: ${ALERT_COUNT} ---"
+          cat alert_summary.txt
+
+      - name: Run security iteration agent
+        if: steps.iteration_check.outputs.capped == 'false'
+        env:
+          CLAUDE_CODE_USE_FOUNDRY: "1"
+          ANTHROPIC_FOUNDRY_RESOURCE: orix-adastra-adlc
+          ANTHROPIC_FOUNDRY_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+          ANTHROPIC_DEFAULT_SONNET_MODEL: claude-sonnet-4-6
+          ANTHROPIC_DEFAULT_OPUS_MODEL: claude-opus-4-8
+        run: |
+          ALERTS=$(cat alert_summary.txt)
+          printf '/iterate %s %s\n' \
+            "${{ steps.iteration_check.outputs.pr_number }}" \
+            "Fix the following CodeQL security alerts. For each alert: read the file at the given path and line number, fix the vulnerability following ADLC security rules in CLAUDE.md, and do not touch any unrelated code.
+
+          ${ALERTS}" \
+            | claude --print \
+              --permission-mode bypassPermissions \
+              --allowed-tools "Write,Edit,Read,Bash,Glob,Grep" \
+            | tee security_iteration_log.txt
+          echo "--- Security iteration finished ---"
+
+      - name: Validate fix
+        if: steps.iteration_check.outputs.capped == 'false'
+        env:
+          CLAUDE_CODE_USE_FOUNDRY: "1"
+          ANTHROPIC_FOUNDRY_RESOURCE: orix-adastra-adlc
+          ANTHROPIC_FOUNDRY_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+          ANTHROPIC_DEFAULT_SONNET_MODEL: claude-sonnet-4-6
+          ANTHROPIC_DEFAULT_OPUS_MODEL: claude-opus-4-8
+        run: |
+          echo "/validate-output" | claude --print \
+            --permission-mode bypassPermissions \
+            --allowed-tools "Read,Bash,Glob,Grep" \
+            | tee validation_log.txt
+          grep -qi "FAIL" validation_log.txt && exit 1 || true
+
+      - name: Commit and push fix
+        if: steps.iteration_check.outputs.capped == 'false'
+        run: |
+          # Clean up agent-context artifacts before commit
+          rm -rf _standards .claude ai-dev CLAUDE.md
+          rm -f codeql_alerts.json alert_summary.txt security_iteration_log.txt validation_log.txt
+
+          git config user.name "adlc-agent"
+          git config user.email "adlc-agent@orix-adlc.com"
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "No changes made by agent — alert may need manual review."
+            exit 0
+          fi
+
+          ITER=${{ steps.iteration_check.outputs.count }}
+          git commit -m "fix(adlc): security-iteration $((ITER+1)) — CodeQL alerts resolved
+
+          PR: #${{ steps.iteration_check.outputs.pr_number }}
+          Alerts fixed: $(jq 'length' codeql_alerts.json 2>/dev/null || echo 'unknown')
+          Agent: Claude Code via ADLC (Foundry)"
+
+          git push origin HEAD
+
+      - name: Post success comment on PR
+        if: steps.iteration_check.outputs.capped == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
+        run: |
+          ITER=${{ steps.iteration_check.outputs.count }}
+          gh pr comment ${{ steps.iteration_check.outputs.pr_number }} \
+            --repo ${{ github.repository }} \
+            --body "🔒 **ADLC Security Auto-Iterate: attempt $((ITER+1)) complete.**
+
+          CodeQL alerts have been addressed and a fix commit has been pushed.
+          CodeQL will re-scan automatically — please check the Checks tab.
+
+          <details>
+          <summary>Alerts addressed</summary>
+
+          \`\`\`
+          $(cat alert_summary.txt 2>/dev/null || echo 'See workflow logs')
+          \`\`\`
+          </details>"
+
+      - name: Post failure comment on PR
+        if: failure() && steps.iteration_check.outputs.capped == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
+        run: |
+          gh pr comment ${{ steps.iteration_check.outputs.pr_number }} \
+            --repo ${{ github.repository }} \
+            --body "⚠️ **ADLC Security Auto-Iterate: attempt failed.**
+
+          The agent encountered an error trying to fix the CodeQL alerts.
+
+          **Next steps:**
+          1. Check [workflow logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          2. Fix manually and push, or re-trigger by pushing a new commit
+          3. Tag \`@adastra-team\` if you need help"
