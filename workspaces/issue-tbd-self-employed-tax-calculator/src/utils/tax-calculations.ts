@@ -1,6 +1,5 @@
 import {
   FilingStatus,
-  SE_TAX_RATE,
   SE_INCOME_FACTOR,
   SE_TAX_DEDUCTIBLE_FRACTION,
   QBI_RATE,
@@ -38,7 +37,6 @@ export interface TaxSavingsResult {
 
 /**
  * Calculates the self-employment tax for a given gross income.
- * SE tax = (grossIncome * SE_INCOME_FACTOR) * SE_TAX_RATE
  * The Social Security portion (12.4%) is capped at SS_WAGE_BASE.
  * The Medicare portion (2.9%) applies to all net SE income.
  */
@@ -161,6 +159,3 @@ export function calcTaxSavings(
     totalSavings,
   };
 }
-
-/** SE_TAX_RATE re-exported for use in UI labels */
-export { SE_TAX_RATE };
