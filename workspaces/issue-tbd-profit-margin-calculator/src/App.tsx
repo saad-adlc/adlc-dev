@@ -1,4 +1,10 @@
-/** App — root component. */
+import ProfitMarginCalculator from './profit-margin-calculator';
+
+/** App — mounts the ProfitMarginCalculator. */
 export default function App() {
-  return <div id="app" />;
+  return (
+    <div id="app">
+      <ProfitMarginCalculator />
+    </div>
+  );
 }
