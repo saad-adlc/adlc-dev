@@ -11,7 +11,14 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'lcov', 'json-summary'],
       thresholds: { lines: 80, functions: 80, branches: 80, statements: 80 },
-      exclude: ['**/main.tsx', '**/*.config.*', '**/dist/**', '**/coverage/**'],
+      exclude: [
+        '**/main.tsx',
+        '**/*.config.*',
+        '**/dist/**',
+        '**/coverage/**',
+        '**/*.test.ts',
+        '**/*.test.tsx',
+      ],
     },
   },
 });
