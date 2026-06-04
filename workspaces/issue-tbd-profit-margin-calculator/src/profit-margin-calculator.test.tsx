@@ -32,21 +32,21 @@ describe('ProfitMarginCalculator', () => {
     render(<ProfitMarginCalculator />);
     fireEvent.change(screen.getByLabelText(/revenue/i), { target: { value: '1000' } });
     fireEvent.change(screen.getByLabelText(/total cost/i), { target: { value: '950' } });
-    expect(screen.getByTestId('health-bar')).toHaveClass('health-bar--red');
+    expect(screen.getByTestId('health-bar')).toHaveAttribute('data-health', 'red');
   });
 
   it('shows amber health status when margin is between 10% and 25%', () => {
     render(<ProfitMarginCalculator />);
     fireEvent.change(screen.getByLabelText(/revenue/i), { target: { value: '1000' } });
     fireEvent.change(screen.getByLabelText(/total cost/i), { target: { value: '850' } });
-    expect(screen.getByTestId('health-bar')).toHaveClass('health-bar--amber');
+    expect(screen.getByTestId('health-bar')).toHaveAttribute('data-health', 'amber');
   });
 
   it('shows green health status when margin is above 25%', () => {
     render(<ProfitMarginCalculator />);
     fireEvent.change(screen.getByLabelText(/revenue/i), { target: { value: '1000' } });
     fireEvent.change(screen.getByLabelText(/total cost/i), { target: { value: '600' } });
-    expect(screen.getByTestId('health-bar')).toHaveClass('health-bar--green');
+    expect(screen.getByTestId('health-bar')).toHaveAttribute('data-health', 'green');
   });
 
   it('handles zero revenue without crashing', () => {
@@ -60,7 +60,7 @@ describe('ProfitMarginCalculator', () => {
     render(<ProfitMarginCalculator />);
     fireEvent.change(screen.getByLabelText(/revenue/i), { target: { value: '500' } });
     fireEvent.change(screen.getByLabelText(/total cost/i), { target: { value: '700' } });
-    expect(screen.getByTestId('health-bar')).toHaveClass('health-bar--red');
+    expect(screen.getByTestId('health-bar')).toHaveAttribute('data-health', 'red');
   });
 
   it('handles non-numeric input gracefully', () => {
