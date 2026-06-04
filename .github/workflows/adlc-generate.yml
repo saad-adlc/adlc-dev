@@ -1,8 +1,13 @@
-# Deviations from PLAN.md (Task 2.1):
-#   - Key Vault step removed; Foundry key + agent token read directly from
-#     GitHub Actions secrets (FOUNDRY_API_KEY, GITHUB_AGENT_TOKEN) for the
-#     personal-GitHub POC. Restore the azure/get-keyvault-secrets step when
-#     deploying into the orix-adlc org with Azure access.
+# ADLC — Generate Feature
+#
+# Triggered by adding the `adlc-generate` label to a GitHub issue.
+# Claude Code (via Azure Foundry) reads the issue, scaffolds the workspace,
+# runs npm install to generate a real package-lock.json, writes all source
+# files and tests to disk, validates locally, then commits and opens a PR.
+#
+# All code generation happens inside GitHub Actions — Claude Code has full
+# filesystem access, so npm install, tsc, eslint, and vitest all run for real.
+
 name: ADLC — Generate Feature
 
 on:
@@ -22,19 +27,24 @@ jobs:
       - name: Checkout adlc-dev
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.ADLC_AGENT_TOKEN }}
 
-      - name: Pull latest standards (CLAUDE.md + ai-dev/) from adlc-standards
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Pull latest standards from adlc-standards
         run: |
-          git clone https://x-access-token:${{ secrets.ADLC_AGENT_TOKEN }}@github.com/saad-adlc/adlc-standards.git _standards
+          git clone \
+            https://x-access-token:${{ secrets.ADLC_AGENT_TOKEN }}@github.com/saad-adlc/adlc-standards.git \
+            _standards
           cp _standards/CLAUDE.md ./CLAUDE.md
           cp -r _standards/ai-dev ./ai-dev
-          # Register ADLC slash commands so Claude Code recognizes /generate-feature etc.
           mkdir -p .claude/commands
           cp _standards/ai-dev/workflows/*.md .claude/commands/
-          ls -la .claude/commands/
 
-      - name: Install Claude Code (native installer per Microsoft Foundry docs)
+      - name: Install Claude Code
         run: |
           curl -fsSL https://claude.ai/install.sh | bash
           echo "$HOME/.local/bin" >> $GITHUB_PATH
@@ -49,14 +59,186 @@ jobs:
             | tr -cd '[:alnum:]-' \
             | cut -c1-40)
           BRANCH="feature/issue-${ISSUE}-${SLUG}"
+          WORKSPACE="workspaces/issue-${ISSUE}-${SLUG}"
           git checkout -b "$BRANCH"
           echo "name=$BRANCH" >> $GITHUB_OUTPUT
+          echo "workspace=$WORKSPACE" >> $GITHUB_OUTPUT
+          echo "slug=issue-${ISSUE}-${SLUG}" >> $GITHUB_OUTPUT
 
-      - name: Fetch latest issue context
-        # Always read the issue live via the API. The github.event payload is a
-        # snapshot taken at trigger time and lags behind edits/comments (the
-        # stale-body bug). This also pulls the full comment thread so the agent
-        # has the running conversation when the user answers its questions.
+      - name: Scaffold workspace
+        # Create the full workspace directory with all config files and run
+        # npm install to generate a real package-lock.json BEFORE Claude Code
+        # writes any source files. This is the fix for CI failing on npm ci.
+        id: scaffold
+        run: |
+          WORKSPACE=${{ steps.branch.outputs.workspace }}
+          SLUG=${{ steps.branch.outputs.slug }}
+          mkdir -p "${WORKSPACE}/src"
+
+          # .gitignore
+          cat > "${WORKSPACE}/.gitignore" << 'EOF'
+          node_modules
+          dist
+          coverage
+          *.local
+          .env
+          .env.*
+          !.env.example
+          EOF
+
+          # package.json
+          cat > "${WORKSPACE}/package.json" << EOF
+          {
+            "name": "${SLUG}",
+            "private": true,
+            "version": "0.0.0",
+            "type": "module",
+            "scripts": {
+              "dev": "vite",
+              "build": "vite build",
+              "typecheck": "tsc --noEmit",
+              "lint": "eslint . --max-warnings 0",
+              "test": "vitest run --coverage",
+              "ci": "npm run typecheck && npm run lint && npm run test"
+            },
+            "dependencies": {
+              "react": "^18.3.1",
+              "react-dom": "^18.3.1"
+            },
+            "devDependencies": {
+              "@eslint/js": "^9.15.0",
+              "@testing-library/jest-dom": "^6.4.0",
+              "@testing-library/react": "^16.0.1",
+              "@types/react": "^18.3.12",
+              "@types/react-dom": "^18.3.1",
+              "@vitejs/plugin-react": "^4.3.3",
+              "@vitest/coverage-v8": "^2.1.5",
+              "eslint": "^9.15.0",
+              "globals": "^15.12.0",
+              "jsdom": "^25.0.1",
+              "typescript": "^5.6.3",
+              "typescript-eslint": "^8.15.0",
+              "vite": "^5.4.11",
+              "vitest": "^2.1.5"
+            }
+          }
+          EOF
+
+          # tsconfig.json
+          cat > "${WORKSPACE}/tsconfig.json" << 'EOF'
+          {
+            "compilerOptions": {
+              "target": "ES2020",
+              "useDefineForClassFields": true,
+              "lib": ["ES2020", "DOM", "DOM.Iterable"],
+              "module": "ESNext",
+              "skipLibCheck": true,
+              "moduleResolution": "bundler",
+              "resolveJsonModule": true,
+              "isolatedModules": true,
+              "moduleDetection": "force",
+              "noEmit": true,
+              "jsx": "react-jsx",
+              "strict": true,
+              "noUnusedLocals": true,
+              "noUnusedParameters": true,
+              "noFallthroughCasesInSwitch": true,
+              "types": ["vitest/globals"]
+            },
+            "include": ["src"]
+          }
+          EOF
+
+          # vite.config.ts
+          cat > "${WORKSPACE}/vite.config.ts" << 'EOF'
+          import { defineConfig } from 'vitest/config';
+          import react from '@vitejs/plugin-react';
+
+          export default defineConfig({
+            plugins: [react()],
+            test: {
+              globals: true,
+              environment: 'jsdom',
+              setupFiles: ['./src/test-setup.ts'],
+              coverage: {
+                provider: 'v8',
+                reporter: ['text', 'lcov', 'json-summary'],
+                thresholds: { lines: 80, functions: 80, branches: 80, statements: 80 },
+                exclude: ['**/main.tsx', '**/*.config.*', '**/dist/**', '**/coverage/**'],
+              },
+            },
+          });
+          EOF
+
+          # eslint.config.mjs
+          cat > "${WORKSPACE}/eslint.config.mjs" << 'EOF'
+          import js from '@eslint/js';
+          import tseslint from 'typescript-eslint';
+          import globals from 'globals';
+
+          export default tseslint.config(
+            { ignores: ['dist', 'coverage', '*.config.ts', 'eslint.config.mjs'] },
+            js.configs.recommended,
+            ...tseslint.configs.recommended,
+            {
+              files: ['**/*.{ts,tsx}'],
+              languageOptions: { globals: { ...globals.browser } },
+            },
+          );
+          EOF
+
+          # index.html
+          cat > "${WORKSPACE}/index.html" << EOF
+          <!doctype html>
+          <html lang="en">
+            <head>
+              <meta charset="UTF-8" />
+              <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+              <title>${SLUG}</title>
+            </head>
+            <body>
+              <div id="root"></div>
+              <script type="module" src="/src/main.tsx"></script>
+            </body>
+          </html>
+          EOF
+
+          # src/test-setup.ts
+          cat > "${WORKSPACE}/src/test-setup.ts" << 'EOF'
+          import '@testing-library/jest-dom';
+          EOF
+
+          # src/main.tsx
+          cat > "${WORKSPACE}/src/main.tsx" << 'EOF'
+          import { StrictMode } from 'react';
+          import { createRoot } from 'react-dom/client';
+          import App from './App';
+
+          createRoot(document.getElementById('root')!).render(
+            <StrictMode>
+              <App />
+            </StrictMode>,
+          );
+          EOF
+
+          # src/App.tsx — placeholder, Claude Code will replace this
+          cat > "${WORKSPACE}/src/App.tsx" << 'EOF'
+          /** App — root component. */
+          export default function App() {
+            return <div id="app" />;
+          }
+          EOF
+
+          echo "Workspace scaffolded at ${WORKSPACE}"
+
+          # Run npm install to generate the real package-lock.json
+          # This is the critical step — without it CI fails on npm ci
+          cd "${WORKSPACE}"
+          npm install
+          echo "npm install complete — package-lock.json generated"
+          ls -la package-lock.json
+
+      - name: Fetch issue context
         env:
           GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
         run: |
@@ -65,32 +247,50 @@ jobs:
             --json body,comments \
             --jq '"# Issue body\n" + .body + "\n\n# Comments\n" + ([.comments[] | "## \(.author.login):\n\(.body)"] | join("\n\n"))' \
             > issue_context.txt
-          echo "--- Issue context fetched ---"
+          echo "--- Issue context ---"
+          cat issue_context.txt
 
-      - name: Run generation agent
+      - name: Run Claude Code generation agent
         env:
-          # Per Microsoft Foundry docs (learn.microsoft.com/.../configure-claude-code).
-          # CLAUDE_CODE_USE_FOUNDRY=1 makes the CLI handle Foundry protocol details
-          # internally (including which beta headers to send to Foundry's gateway).
           CLAUDE_CODE_USE_FOUNDRY: "1"
           ANTHROPIC_FOUNDRY_RESOURCE: orix-adastra-adlc
           ANTHROPIC_FOUNDRY_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
           ANTHROPIC_DEFAULT_SONNET_MODEL: claude-sonnet-4-6
           ANTHROPIC_DEFAULT_OPUS_MODEL: claude-opus-4-8
         run: |
-          # Pipe prompt via stdin to avoid bash arg-quoting issues with multi-line
-          # bodies. Feed the live issue body + full comment thread (fetched above),
-          # not the event-payload snapshot, so re-runs see the user's answers.
-          printf '/generate-feature %s\n' "$(cat issue_context.txt)" | claude --print \
-            --permission-mode bypassPermissions \
-            --allowed-tools "Write,Edit,Read,Bash,Glob,Grep" \
-            | tee generation_log.txt
-          echo "--- Generation finished ---"
+          WORKSPACE=${{ steps.branch.outputs.workspace }}
+          ISSUE_CONTEXT=$(cat issue_context.txt)
 
-      - name: Post agent response as issue comment
-        # Always post the agent's output back to the issue — both when it asks
-        # clarifying questions (conversation loop) and when it generates code
-        # (audit trail). Runs before the commit step, which deletes the log.
+          # Tell Claude Code exactly where the workspace is and what's already done.
+          # It must NOT re-scaffold — just write the feature code and tests.
+          printf 'You are the ADLC agent implementing a GitHub issue.
+
+          WORKSPACE: %s
+          The workspace is already scaffolded. package-lock.json already exists.
+          Do NOT run npm install. Do NOT recreate package.json or config files.
+
+          Your job:
+          1. Read CLAUDE.md and ai-dev/rules/react/style.md
+          2. Read the issue and write a spec.md in the workspace root
+          3. Write tests first in %s/src/ (test files: kebab-case.test.tsx)
+          4. Write the implementation in %s/src/ (component files: kebab-case.tsx)
+          5. Update %s/src/App.tsx to mount the main component
+          6. Run: cd %s && npm run ci
+          7. Fix any failures until npm run ci passes
+          8. Do NOT commit — the workflow handles git
+
+          Issue context:
+          %s' \
+            "$WORKSPACE" "$WORKSPACE" "$WORKSPACE" "$WORKSPACE" "$WORKSPACE" \
+            "$ISSUE_CONTEXT" \
+            | claude --print \
+              --permission-mode bypassPermissions \
+              --allowed-tools "Write,Edit,Read,Bash,Glob,Grep" \
+            | tee generation_log.txt
+
+          echo "--- Generation complete ---"
+
+      - name: Post agent output as issue comment
         if: always()
         env:
           GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
@@ -99,15 +299,11 @@ jobs:
             gh issue comment ${{ github.event.issue.number }} \
               --repo ${{ github.repository }} \
               --body-file generation_log.txt
-          else
-            echo "No generation_log.txt to post (agent step may not have run)."
           fi
 
-      - name: Commit generated code
+      - name: Commit all generated code
         id: commit
         run: |
-          # Remove agent-context artifacts before commit (these live in adlc-standards,
-          # not in the feature branch; they were copied in for Claude to read).
           rm -rf _standards .claude ai-dev
           rm -f CLAUDE.md generation_log.txt issue_context.txt
 
@@ -115,24 +311,21 @@ jobs:
           git config user.email "adlc-agent@saad-adlc.com"
           git add -A
 
-          # No files = the agent asked clarifying questions instead of coding.
-          # That's a valid conversation-loop outcome, not a failure: exit clean
-          # so the run goes green. The question comment was already posted above;
-          # the user answers in a comment and re-toggles the label to continue.
           if git diff --cached --quiet; then
-            echo "No code generated — agent asked clarifying questions. Exiting cleanly."
+            echo "No code generated — agent may have asked clarifying questions."
             echo "committed=false" >> $GITHUB_OUTPUT
             exit 0
           fi
-          echo "committed=true" >> $GITHUB_OUTPUT
 
+          echo "committed=true" >> $GITHUB_OUTPUT
           git commit -m "feat(adlc): generated for issue #${{ github.event.issue.number }}
 
           Issue: ${{ github.event.issue.title }}
-          Pipeline: Claude Code via ADLC
-          Model: claude-sonnet-4-6 (Foundry)"
+          Workspace: ${{ steps.branch.outputs.workspace }}
+          Pipeline: Claude Code via ADLC (Azure Foundry)
+          Model: claude-sonnet-4-6"
 
-      - name: Push branch and open PR to adlc-stage
+      - name: Push and open PR
         if: steps.commit.outputs.committed == 'true'
         env:
           GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
@@ -141,24 +334,31 @@ jobs:
           gh pr create \
             --head ${{ steps.branch.outputs.name }} \
             --base main \
-            --title "feat: ${{ github.event.issue.title }}" \
+            --title "feat: ${{ github.event.issue.title }} (issue #${{ github.event.issue.number }})" \
             --label adlc-generated \
-            --body "## ADLC Generated PR
+            --body "## Summary
 
-          **Source issue:** #${{ github.event.issue.number }}
-          **Model:** claude-sonnet-4-6 (Microsoft Foundry)
-          **Validation:** passed
+          Closes #${{ github.event.issue.number }}
 
-          ### Feature request
-          ${{ github.event.issue.body }}
+          Generated by Claude Code via ADLC pipeline (Azure Foundry).
 
-          ### Review instructions
-          1. Check code against the spec in the issue
-          2. Add inline comments for anything that needs changing
-          3. Add label \`adlc-iterate\` to trigger the refinement agent
-          4. Approve and merge when satisfied"
+          **Workspace:** \`${{ steps.branch.outputs.workspace }}\`
+          **Model:** claude-sonnet-4-6
 
-      - name: Notify failure on issue
+          ## How to test
+          \`\`\`bash
+          git checkout ${{ steps.branch.outputs.name }}
+          cd ${{ steps.branch.outputs.workspace }}
+          npm install && npm run dev
+          \`\`\`
+
+          ## Review instructions
+          - Check code against the issue spec
+          - Add inline comments for anything that needs changing
+          - Add label \`adlc-iterate\` to trigger the iteration agent
+          - Approve and merge when satisfied"
+
+      - name: Notify failure
         if: failure()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -166,11 +366,6 @@ jobs:
           gh issue comment ${{ github.event.issue.number }} \
             --body "⚠️ **ADLC generation failed.**
 
-          The agent could not produce code that passes validation.
+          Check [workflow logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
 
-          **Next steps:**
-          1. Check [workflow logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-          2. Refine the feature description in this issue
-          3. Re-add label \`adlc-generate\` to retry
-
-          If this fails again after refinement, tag \`@adastra-team\`."
+          Refine the issue description and re-add the \`adlc-generate\` label to retry."
