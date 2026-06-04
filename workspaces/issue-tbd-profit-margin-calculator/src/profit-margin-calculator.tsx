@@ -105,6 +105,7 @@ export default function ProfitMarginCalculator() {
           <div className={styles.healthSection}>
             <div
               data-testid="health-bar"
+              data-health={result.health}
               className={`${styles['health-bar']} ${styles[`health-bar--${result.health}`]}`}
             >
               <div
