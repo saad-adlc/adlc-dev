@@ -86,7 +86,8 @@ jobs:
           !.env.example
           EOF
 
-          # package.json
+          # package.json — test and test:coverage are split so adlc-ci.yml
+          # can call npm run test:coverage without the duplicate --coverage flag
           cat > "${WORKSPACE}/package.json" << EOF
           {
             "name": "${SLUG}",
@@ -98,8 +99,9 @@ jobs:
               "build": "vite build",
               "typecheck": "tsc --noEmit",
               "lint": "eslint . --max-warnings 0",
-              "test": "vitest run --coverage",
-              "ci": "npm run typecheck && npm run lint && npm run test"
+              "test": "vitest run",
+              "test:coverage": "vitest run --coverage",
+              "ci": "npm run typecheck && npm run lint && npm run test:coverage"
             },
             "dependencies": {
               "react": "^18.3.1",
