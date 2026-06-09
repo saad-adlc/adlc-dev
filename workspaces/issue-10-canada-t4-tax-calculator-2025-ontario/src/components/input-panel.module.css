@@ -1,0 +1,75 @@
+.panel {
+  background: #fff;
+  border: 1px solid #dde1e7;
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 420px;
+}
+
+.toggle {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  background: #f4f6f8;
+  border-radius: 6px;
+  padding: 4px;
+}
+
+.tab,
+.activeTab {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.tab {
+  background: transparent;
+  color: #555;
+}
+
+.activeTab {
+  background: #fff;
+  color: #1a56db;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.field label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+}
+
+.field input {
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 1rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.field input:focus {
+  border-color: #1a56db;
+  box-shadow: 0 0 0 3px rgba(26, 86, 219, 0.15);
+}
+
+.field input[aria-invalid='true'] {
+  border-color: #dc2626;
+}
+
+.error {
+  font-size: 0.8rem;
+  color: #dc2626;
+}
