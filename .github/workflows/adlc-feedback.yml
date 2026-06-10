@@ -28,7 +28,6 @@ jobs:
         id: check
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
           # Only run on PR comments, not issue comments
           if [ "${{ github.event.issue.pull_request }}" == "" ]; then
@@ -56,6 +55,12 @@ jobs:
             exit 0
           fi
 
+          # Read comment body reliably from the event JSON file.
+          # Do NOT use ${{ github.event.comment.body }} inline in env: — multiline
+          # values and special characters cause YAML expansion to truncate or mangle
+          # the content, making the bot-comment filter below silently fail.
+          COMMENT_BODY=$(jq -r '.comment.body' < "$GITHUB_EVENT_PATH")
+
           # Skip bot-generated comments regardless of which account posted them.
           # Primary check: machine-readable HTML marker added to every bot comment body.
           # Fallback: emoji/text prefix match (kept for comments posted before this fix).
@@ -63,11 +68,9 @@ jobs:
             echo "is_adlc_pr=false" >> $GITHUB_OUTPUT
             exit 0
           fi
-          if echo "$COMMENT_BODY" | head -1 | grep -qF "ADLC"; then
-            if echo "$COMMENT_BODY" | head -1 | grep -qE "(Preview deployed|Clarification needed|Iterating on your feedback|Iteration complete)"; then
-              echo "is_adlc_pr=false" >> $GITHUB_OUTPUT
-              exit 0
-            fi
+          if echo "$COMMENT_BODY" | grep -qE "^\s*(🔍|🤔|🔄|✅)\s*\*\*ADLC"; then
+            echo "is_adlc_pr=false" >> $GITHUB_OUTPUT
+            exit 0
           fi
 
           # Get branch and detect workspace
@@ -202,7 +205,7 @@ Your feedback has been applied and a new commit pushed.
 > CI is running now. The preview will update automatically once it passes.
 > Check the Checks tab to follow progress."
           else
-            FEEDBACK_SNIPPET=$(echo "$COMMENT_BODY" | head -3)
+            FEEDBACK_SNIPPET=$(jq -r '.comment.body' < "$GITHUB_EVENT_PATH" | head -3)
             gh pr comment ${{ needs.check-context.outputs.pr_number }} \
               --repo ${{ github.repository }} \
               --body "<!-- adlc-bot -->
