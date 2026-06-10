@@ -68,7 +68,7 @@ jobs:
             echo "is_adlc_pr=false" >> $GITHUB_OUTPUT
             exit 0
           fi
-          if echo "$COMMENT_BODY" | grep -qE "^\s*(🔍|🤔|🔄|✅)\s*\*\*ADLC"; then
+          if echo "$COMMENT_BODY" | grep -qF "**ADLC"; then
             echo "is_adlc_pr=false" >> $GITHUB_OUTPUT
             exit 0
           fi
@@ -141,8 +141,9 @@ jobs:
                   ([.comments[] | "## \(.author.login):\n\(.body)"] | join("\n\n"))' \
             > pr_context.txt
 
-          # Latest comment is the business user feedback to act on
-          echo "${{ github.event.comment.body }}" > latest_feedback.txt
+          # Latest comment is the business user feedback to act on.
+          # Use jq + GITHUB_EVENT_PATH — same reason as the COMMENT_BODY read above.
+          jq -r '.comment.body' < "$GITHUB_EVENT_PATH" > latest_feedback.txt
 
           echo "Workspace: $WORKSPACE"
           echo "Feedback: $(cat latest_feedback.txt)"
