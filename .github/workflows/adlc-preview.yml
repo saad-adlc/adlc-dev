@@ -120,7 +120,7 @@ jobs:
           EXISTING=$(gh pr view ${{ steps.detect.outputs.pr_number }} \
             --repo ${{ github.repository }} \
             --json comments \
-            --jq '.comments[] | select(.body | startswith("🔍 **ADLC Preview")) | .databaseId' \
+            --jq '.comments[] | select(.body | contains("<!-- adlc-bot -->") and contains("ADLC Preview deployed")) | .databaseId' \
             2>/dev/null || echo "")
 
           if [ -n "$EXISTING" ]; then
@@ -131,12 +131,13 @@ jobs:
 
           gh pr comment ${{ steps.detect.outputs.pr_number }} \
             --repo ${{ github.repository }} \
-            --body "🔍 **ADLC Preview deployed**
+            --body "<!-- adlc-bot -->
+🔍 **ADLC Preview deployed**
 
-          **Live preview:** ${{ steps.detect.outputs.preview_url }}
+**Live preview:** ${{ steps.detect.outputs.preview_url }}
 
-          **Workspace:** \`${{ steps.detect.outputs.workspace }}\`
-          **Commit:** \`${{ github.event.workflow_run.head_sha }}\`
+**Workspace:** \`${{ steps.detect.outputs.workspace }}\`
+**Commit:** \`${{ github.event.workflow_run.head_sha }}\`
 
-          > This preview updates automatically when new commits are pushed and CI passes.
-          > To request changes, comment below — the ADLC agent will iterate and redeploy."
+> This preview updates automatically when new commits are pushed and CI passes.
+> To request changes, comment below — the ADLC agent will iterate and redeploy."

@@ -80,4 +80,5 @@ jobs:
           GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
         run: |
           gh pr comment ${{ github.event.pull_request.number }} \
-            --body "✅ Iteration complete. New commit pushed — please re-review."
+            --body "<!-- adlc-bot -->
+✅ Iteration complete. New commit pushed — please re-review."
