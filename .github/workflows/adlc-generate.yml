@@ -1,40 +1,139 @@
-# ADLC — Generate Feature
+# ADLC — Iterate (Phase 8 self-healing loop)
 #
-# Triggered by adding the `adlc-generate` label to a GitHub issue.
-# Claude Code (via Azure Foundry) reads the issue, scaffolds the workspace,
-# runs npm install to generate a real package-lock.json, writes all source
-# files and tests to disk, validates locally, then commits and opens a PR.
+# Mirrors adlc-generate.yml's Claude Code pattern (CLI via Azure Foundry).
+# Triggers:
+#   - adlc-ci fails on a feature/issue-* branch            → fix CI failure
+#   - reviewer requests changes on an ADLC PR               → address review
+#   - `adlc-iterate` label added to a PR                    → address review
+#   - `/adlc-iterate:` PR comment (chat relays business feedback this way)
 #
-# All code generation happens inside GitHub Actions — Claude Code has full
-# filesystem access, so npm install, tsc, eslint, and vitest all run for real.
+# Cap: 3 iterations, counted from `iteration-` commits since main.
+# Status-only commits use [skip ci] so they never retrigger adlc-ci;
+# the actual fix push (via ADLC_AGENT_TOKEN) DOES retrigger it — that's the loop.
+#
+# Secrets reused from adlc-generate.yml: ADLC_AGENT_TOKEN, CLAUDE_API_KEY.
 
-name: ADLC — Generate Feature
+name: ADLC — Iterate
 
 on:
-  issues:
+  workflow_run:
+    workflows: ["ADLC — CI"]        # ← must match the exact `name:` in adlc-ci.yml — verify
+    types: [completed]
+  pull_request_review:
+    types: [submitted]
+  pull_request:
     types: [labeled]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+# Never run two iterations on the same repo concurrently — queue them
+concurrency:
+  group: adlc-iterate
+  cancel-in-progress: false
 
 jobs:
-  generate:
-    if: github.event.label.name == 'adlc-generate'
+  iterate:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-      issues: write
+    if: >
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'failure' &&
+       startsWith(github.event.workflow_run.head_branch, 'feature/issue-')) ||
+      (github.event_name == 'pull_request_review' &&
+       github.event.review.state == 'changes_requested' &&
+       startsWith(github.event.pull_request.head.ref, 'feature/issue-')) ||
+      (github.event_name == 'pull_request' &&
+       github.event.label.name == 'adlc-iterate' &&
+       startsWith(github.event.pull_request.head.ref, 'feature/issue-')) ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       startsWith(github.event.comment.body, '/adlc-iterate:'))
 
     steps:
-      - name: Checkout adlc-dev
+      - name: Resolve branch, PR, and task
+        id: ctx
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.ADLC_AGENT_TOKEN }}
+          script: |
+            let branch, pr, task;
+            if (context.eventName === 'workflow_run') {
+              branch = context.payload.workflow_run.head_branch;
+              const prs = await github.rest.pulls.list({ ...context.repo,
+                head: `${context.repo.owner}:${branch}`, state: 'open' });
+              pr = prs.data[0]?.number;
+              task = `CI failed on this branch. Run: gh run view ${context.payload.workflow_run.id} --log-failed  to read the failing check (typecheck / lint / test / coverage), then fix exactly that.`;
+            } else if (context.eventName === 'pull_request_review' ||
+                       context.eventName === 'pull_request') {
+              branch = context.payload.pull_request.head.ref;
+              pr = context.payload.pull_request.number;
+              task = `A reviewer requested changes on PR #${pr}. Run: gh pr view ${pr} --comments  and  gh api repos/${context.repo.owner}/${context.repo.repo}/pulls/${pr}/comments  to read all review feedback, then address every comment.`;
+            } else {
+              pr = context.payload.issue.number;
+              const prData = await github.rest.pulls.get({ ...context.repo, pull_number: pr });
+              if (prData.data.state !== 'open') { core.setFailed('PR is not open'); return; }
+              branch = prData.data.head.ref;
+              task = `Business-user feedback (apply exactly, minimally): ${context.payload.comment.body.replace('/adlc-iterate:', '').trim()}`;
+            }
+            if (!pr || !branch || !branch.startsWith('feature/issue-')) {
+              core.setFailed('No open ADLC PR for this event'); return;
+            }
+            core.setOutput('branch', branch);
+            core.setOutput('pr', String(pr));
+            core.setOutput('slug', branch.replace('feature/', ''));
+            core.setOutput('task', task);
+
+      - name: Checkout feature branch
         uses: actions/checkout@v4
         with:
+          ref: ${{ steps.ctx.outputs.branch }}
           token: ${{ secrets.ADLC_AGENT_TOKEN }}
+          fetch-depth: 0
+
+      - name: Enforce iteration cap (3)
+        id: cap
+        run: |
+          git fetch origin main
+          # Count only iteration commits on THIS branch since main —
+          # never the full history (main commits must not burn the cap)
+          N=$(git log origin/main..HEAD --oneline | grep -c 'iteration-' || true)
+          echo "count=$N" >> $GITHUB_OUTPUT
+          echo "next=$((N + 1))" >> $GITHUB_OUTPUT
+          if [ "$N" -ge 3 ]; then echo "capped=true" >> $GITHUB_OUTPUT; fi
+
+      - name: Escalate — cap reached
+        if: steps.cap.outputs.capped == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
+        run: |
+          SLUG=${{ steps.ctx.outputs.slug }}
+          mkdir -p "workspaces/${SLUG}/.adlc"
+          cat > "workspaces/${SLUG}/.adlc/status.json" << JSON
+          { "stage": "escalated", "phase": 8, "iteration": 3,
+            "pr": ${{ steps.ctx.outputs.pr }}, "preview_url": null,
+            "detail": "Automatic fixing stopped after 3 attempts — human input needed",
+            "updated": "$(date -u +%Y-%m-%dT%H:%M:%SZ)" }
+          JSON
+          git config user.name "adlc-agent"
+          git config user.email "adlc-agent@saad-adlc.com"
+          git add "workspaces/${SLUG}/.adlc/status.json"
+          git commit -m "chore(${SLUG}): status -> escalated [skip ci]"
+          git push origin ${{ steps.ctx.outputs.branch }}
+          gh pr comment ${{ steps.ctx.outputs.pr }} \
+            --body "⚠️ **ADLC iterate: cap reached (3/3).** Human input needed — adjust the requirement via chat, or push a manual fix to this branch."
 
       - name: Setup Node 20
+        if: steps.cap.outputs.capped != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Pull latest standards from adlc-standards
+        if: steps.cap.outputs.capped != 'true'
         run: |
           git clone \
             https://x-access-token:${{ secrets.ADLC_AGENT_TOKEN }}@github.com/saad-adlc/adlc-standards.git \
@@ -45,329 +144,118 @@ jobs:
           cp _standards/ai-dev/workflows/*.md .claude/commands/
 
       - name: Install Claude Code
+        if: steps.cap.outputs.capped != 'true'
         run: |
           curl -fsSL https://claude.ai/install.sh | bash
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Create feature branch
-        id: branch
+      - name: Write status -> iterating (no push — committed with the fix)
+        if: steps.cap.outputs.capped != 'true'
         run: |
-          ISSUE=${{ github.event.issue.number }}
-          SLUG=$(echo "${{ github.event.issue.title }}" \
-            | tr '[:upper:]' '[:lower:]' \
-            | tr ' ' '-' \
-            | tr -cd '[:alnum:]-' \
-            | cut -c1-40)
-          BRANCH="feature/issue-${ISSUE}-${SLUG}"
-          WORKSPACE="workspaces/issue-${ISSUE}-${SLUG}"
-          git checkout -b "$BRANCH"
-          echo "name=$BRANCH" >> $GITHUB_OUTPUT
-          echo "workspace=$WORKSPACE" >> $GITHUB_OUTPUT
-          echo "slug=issue-${ISSUE}-${SLUG}" >> $GITHUB_OUTPUT
+          SLUG=${{ steps.ctx.outputs.slug }}
+          mkdir -p "workspaces/${SLUG}/.adlc"
+          cat > "workspaces/${SLUG}/.adlc/status.json" << JSON
+          { "stage": "iterating", "phase": 8,
+            "iteration": ${{ steps.cap.outputs.next }},
+            "pr": ${{ steps.ctx.outputs.pr }}, "preview_url": null,
+            "detail": "Fixing — attempt ${{ steps.cap.outputs.next }} of 3",
+            "updated": "$(date -u +%Y-%m-%dT%H:%M:%SZ)" }
+          JSON
 
-      - name: Scaffold workspace
-        # Create the full workspace directory with all config files and run
-        # npm install to generate a real package-lock.json BEFORE Claude Code
-        # writes any source files. This is the fix for CI failing on npm ci.
-        id: scaffold
-        run: |
-          WORKSPACE=${{ steps.branch.outputs.workspace }}
-          SLUG=${{ steps.branch.outputs.slug }}
-          mkdir -p "${WORKSPACE}/src"
-
-          # .gitignore
-          cat > "${WORKSPACE}/.gitignore" << 'EOF'
-          node_modules
-          dist
-          coverage
-          *.local
-          .env
-          .env.*
-          !.env.example
-          EOF
-
-          # package.json — test and test:coverage are split so adlc-ci.yml
-          # can call npm run test:coverage without the duplicate --coverage flag
-          cat > "${WORKSPACE}/package.json" << EOF
-          {
-            "name": "${SLUG}",
-            "private": true,
-            "version": "0.0.0",
-            "type": "module",
-            "scripts": {
-              "dev": "vite",
-              "build": "vite build",
-              "typecheck": "tsc --noEmit",
-              "lint": "eslint . --max-warnings 0",
-              "test": "vitest run",
-              "test:coverage": "vitest run --coverage",
-              "ci": "npm run typecheck && npm run lint && npm run test:coverage"
-            },
-            "dependencies": {
-              "react": "^18.3.1",
-              "react-dom": "^18.3.1"
-            },
-            "devDependencies": {
-              "@eslint/js": "^9.15.0",
-              "@testing-library/jest-dom": "^6.4.0",
-              "@testing-library/react": "^16.0.1",
-              "@types/react": "^18.3.12",
-              "@types/react-dom": "^18.3.1",
-              "@vitejs/plugin-react": "^4.3.3",
-              "@vitest/coverage-v8": "^2.1.5",
-              "eslint": "^9.15.0",
-              "globals": "^15.12.0",
-              "jsdom": "^25.0.1",
-              "typescript": "^5.6.3",
-              "typescript-eslint": "^8.15.0",
-              "vite": "^5.4.11",
-              "vitest": "^2.1.5"
-            }
-          }
-          EOF
-
-          # tsconfig.json
-          cat > "${WORKSPACE}/tsconfig.json" << 'EOF'
-          {
-            "compilerOptions": {
-              "target": "ES2020",
-              "useDefineForClassFields": true,
-              "lib": ["ES2020", "DOM", "DOM.Iterable"],
-              "module": "ESNext",
-              "skipLibCheck": true,
-              "moduleResolution": "bundler",
-              "resolveJsonModule": true,
-              "isolatedModules": true,
-              "moduleDetection": "force",
-              "noEmit": true,
-              "jsx": "react-jsx",
-              "strict": true,
-              "noUnusedLocals": true,
-              "noUnusedParameters": true,
-              "noFallthroughCasesInSwitch": true,
-              "types": ["vitest/globals"]
-            },
-            "include": ["src"]
-          }
-          EOF
-
-          # vite.config.ts
-          cat > "${WORKSPACE}/vite.config.ts" << 'EOF'
-          import { defineConfig } from 'vitest/config';
-          import react from '@vitejs/plugin-react';
-
-          export default defineConfig({
-            plugins: [react()],
-            test: {
-              globals: true,
-              environment: 'jsdom',
-              setupFiles: ['./src/test-setup.ts'],
-              coverage: {
-                provider: 'v8',
-                reporter: ['text', 'lcov', 'json-summary'],
-                thresholds: { lines: 80, functions: 80, branches: 80, statements: 80 },
-                exclude: ['**/main.tsx', '**/*.config.*', '**/dist/**', '**/coverage/**'],
-              },
-            },
-          });
-          EOF
-
-          # eslint.config.mjs
-          cat > "${WORKSPACE}/eslint.config.mjs" << 'EOF'
-          import js from '@eslint/js';
-          import tseslint from 'typescript-eslint';
-          import globals from 'globals';
-
-          export default tseslint.config(
-            { ignores: ['dist', 'coverage', '*.config.ts', 'eslint.config.mjs'] },
-            js.configs.recommended,
-            ...tseslint.configs.recommended,
-            {
-              files: ['**/*.{ts,tsx}'],
-              languageOptions: { globals: { ...globals.browser } },
-            },
-          );
-          EOF
-
-          # index.html
-          cat > "${WORKSPACE}/index.html" << EOF
-          <!doctype html>
-          <html lang="en">
-            <head>
-              <meta charset="UTF-8" />
-              <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-              <title>${SLUG}</title>
-            </head>
-            <body>
-              <div id="root"></div>
-              <script type="module" src="/src/main.tsx"></script>
-            </body>
-          </html>
-          EOF
-
-          # src/test-setup.ts
-          cat > "${WORKSPACE}/src/test-setup.ts" << 'EOF'
-          import '@testing-library/jest-dom';
-          EOF
-
-          # src/main.tsx
-          cat > "${WORKSPACE}/src/main.tsx" << 'EOF'
-          import { StrictMode } from 'react';
-          import { createRoot } from 'react-dom/client';
-          import App from './App';
-
-          createRoot(document.getElementById('root')!).render(
-            <StrictMode>
-              <App />
-            </StrictMode>,
-          );
-          EOF
-
-          # src/App.tsx — placeholder, Claude Code will replace this
-          cat > "${WORKSPACE}/src/App.tsx" << 'EOF'
-          /** App — root component. */
-          export default function App() {
-            return <div id="app" />;
-          }
-          EOF
-
-          echo "Workspace scaffolded at ${WORKSPACE}"
-
-          # Run npm install to generate the real package-lock.json
-          # This is the critical step — without it CI fails on npm ci
-          cd "${WORKSPACE}"
-          npm install
-          echo "npm install complete — package-lock.json generated"
-          ls -la package-lock.json
-
-      - name: Fetch issue context
-        env:
-          GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
-        run: |
-          gh issue view ${{ github.event.issue.number }} \
-            --repo ${{ github.repository }} \
-            --json body,comments \
-            --jq '"# Issue body\n" + .body + "\n\n# Comments\n" + ([.comments[] | "## \(.author.login):\n\(.body)"] | join("\n\n"))' \
-            > issue_context.txt
-          echo "--- Issue context ---"
-          cat issue_context.txt
-
-      - name: Run Claude Code generation agent
+      - name: Run Claude Code iterate agent
+        if: steps.cap.outputs.capped != 'true'
         env:
           CLAUDE_CODE_USE_FOUNDRY: "1"
           ANTHROPIC_FOUNDRY_RESOURCE: orix-adastra-adlc
           ANTHROPIC_FOUNDRY_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
           ANTHROPIC_DEFAULT_SONNET_MODEL: claude-sonnet-4-6
           ANTHROPIC_DEFAULT_OPUS_MODEL: claude-opus-4-8
+          GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
         run: |
-          WORKSPACE=${{ steps.branch.outputs.workspace }}
-          ISSUE_CONTEXT=$(cat issue_context.txt)
+          WORKSPACE=workspaces/${{ steps.ctx.outputs.slug }}
 
-          # Tell Claude Code exactly where the workspace is and what's already done.
-          # It must NOT re-scaffold — just write the feature code and tests.
-          printf 'You are the ADLC agent implementing a GitHub issue.
+          printf 'You are the ADLC iterate agent — iteration %s of max 3 on PR #%s.
 
           WORKSPACE: %s
-          The workspace is already scaffolded. package-lock.json already exists.
-          Do NOT run npm install. Do NOT recreate package.json or config files.
+          Work ONLY inside this workspace. package-lock.json already exists —
+          do NOT run npm install. Do NOT touch workflows, root files, config
+          files, or other workspaces.
 
-          Your job:
-          1. Read CLAUDE.md and ai-dev/rules/react/style.md
-          2. Read the issue and write a spec.md in the workspace root
-          3. Write tests first in %s/src/ (test files: kebab-case.test.tsx)
-          4. Write the implementation in %s/src/ (component files: kebab-case.tsx)
-          5. Update %s/src/App.tsx to mount the main component
-          6. Run: cd %s && npm run ci
-          7. Fix any failures until npm run ci passes
-          8. Do NOT commit — the workflow handles git
+          TASK:
+          %s
 
-          Issue context:
-          %s' \
-            "$WORKSPACE" "$WORKSPACE" "$WORKSPACE" "$WORKSPACE" "$WORKSPACE" \
-            "$ISSUE_CONTEXT" \
+          Rules:
+          1. Read CLAUDE.md and ai-dev/rules/react/style.md first
+          2. Read every file fully before editing it
+          3. Minimal fix only — no refactors, no new dependencies, no deleted tests
+          4. Run: cd %s && npm run ci
+          5. Fix until npm run ci passes
+          6. Update the "detail" field in %s/.adlc/status.json with a one-line
+             plain-English summary of what you fixed (keep stage "iterating")
+          7. Do NOT commit — the workflow handles git
+
+          ' \
+            "${{ steps.cap.outputs.next }}" "${{ steps.ctx.outputs.pr }}" \
+            "$WORKSPACE" \
+            "${{ steps.ctx.outputs.task }}" \
+            "$WORKSPACE" "$WORKSPACE" \
             | claude --print \
               --permission-mode bypassPermissions \
               --allowed-tools "Write,Edit,Read,Bash,Glob,Grep" \
-            | tee generation_log.txt
+            | tee iterate_log.txt
 
-          echo "--- Generation complete ---"
-
-      - name: Post agent output as issue comment
-        if: always()
+      - name: Post agent output as PR comment
+        if: steps.cap.outputs.capped != 'true' && always()
         env:
           GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
         run: |
-          if [ -s generation_log.txt ]; then
-            gh issue comment ${{ github.event.issue.number }} \
-              --repo ${{ github.repository }} \
-              --body-file generation_log.txt
+          if [ -s iterate_log.txt ]; then
+            gh pr comment ${{ steps.ctx.outputs.pr }} --body-file iterate_log.txt || true
           fi
 
-      - name: Commit all generated code
+      - name: Commit and push fix
+        if: steps.cap.outputs.capped != 'true'
         id: commit
         run: |
           rm -rf _standards .claude ai-dev
-          rm -f CLAUDE.md generation_log.txt issue_context.txt
-
+          rm -f CLAUDE.md iterate_log.txt
           git config user.name "adlc-agent"
           git config user.email "adlc-agent@saad-adlc.com"
           git add -A
-
           if git diff --cached --quiet; then
-            echo "No code generated — agent may have asked clarifying questions."
             echo "committed=false" >> $GITHUB_OUTPUT
             exit 0
           fi
-
           echo "committed=true" >> $GITHUB_OUTPUT
-          git commit -m "feat(adlc): generated for issue #${{ github.event.issue.number }}
+          # Status.json rides along in this commit. This push (PAT) retriggers
+          # adlc-ci — exactly the loop we want: fix -> CI -> pass or iterate again.
+          git commit -m "fix(${{ steps.ctx.outputs.slug }}): iteration-${{ steps.cap.outputs.next }}
 
-          Issue: ${{ github.event.issue.title }}
-          Workspace: ${{ steps.branch.outputs.workspace }}
-          Pipeline: Claude Code via ADLC (Azure Foundry)
+          PR: #${{ steps.ctx.outputs.pr }}
+          Pipeline: ADLC iterate (Claude Code via Azure Foundry)
           Model: claude-sonnet-4-6"
+          git push origin ${{ steps.ctx.outputs.branch }}
 
-      - name: Push and open PR
-        if: steps.commit.outputs.committed == 'true'
+      - name: Comment progress
+        if: steps.cap.outputs.capped != 'true' && steps.commit.outputs.committed == 'true'
         env:
           GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
         run: |
-          git push origin ${{ steps.branch.outputs.name }}
-          gh pr create \
-            --head ${{ steps.branch.outputs.name }} \
-            --base main \
-            --title "feat: ${{ github.event.issue.title }} (issue #${{ github.event.issue.number }})" \
-            --label adlc-generated \
-            --body "## Summary
+          gh pr comment ${{ steps.ctx.outputs.pr }} \
+            --body "🔄 ADLC iterate: attempt ${{ steps.cap.outputs.next }}/3 pushed. CI is re-running."
 
-          Closes #${{ github.event.issue.number }}
+      - name: Comment if no changes were made
+        if: steps.cap.outputs.capped != 'true' && steps.commit.outputs.committed == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
+        run: |
+          gh pr comment ${{ steps.ctx.outputs.pr }} \
+            --body "ℹ️ ADLC iterate ran but made no changes — the agent may need clarification. See its output above."
 
-          Generated by Claude Code via ADLC pipeline (Azure Foundry).
-
-          **Workspace:** \`${{ steps.branch.outputs.workspace }}\`
-          **Model:** claude-sonnet-4-6
-
-          ## How to test
-          \`\`\`bash
-          git checkout ${{ steps.branch.outputs.name }}
-          cd ${{ steps.branch.outputs.workspace }}
-          npm install && npm run dev
-          \`\`\`
-
-          ## Review instructions
-          - Check code against the issue spec
-          - Add inline comments for anything that needs changing
-          - Add label \`adlc-iterate\` to trigger the iteration agent
-          - Approve and merge when satisfied"
-
-      - name: Notify failure
+      - name: Notify workflow failure
         if: failure()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh issue comment ${{ github.event.issue.number }} \
-            --body "⚠️ **ADLC generation failed.**
-
-          Check [workflow logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-
-          Refine the issue description and re-add the \`adlc-generate\` label to retry."
+          gh pr comment ${{ steps.ctx.outputs.pr }} \
+            --body "⚠️ ADLC iterate workflow itself failed. Check [logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})." || true
