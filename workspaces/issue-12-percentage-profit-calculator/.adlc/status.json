@@ -1,5 +1,4 @@
-{ "stage": "clean", "phase": 8, "iteration": 0,
-  "pr": 13,
-  "preview_url": null,
-  "detail": "All checks passed — deploying preview",
-  "updated": "2026-06-10T08:24:20Z" }
+{ "stage": "preview-deployed", "phase": 9, "iteration": 0, "pr": 13,
+  "preview_url": "https://saad-adlc.github.io/adlc-dev/previews/pr-13-issue-12-percentage-profit-calculator/",
+  "detail": "Live preview deployed",
+  "updated": "2026-06-10T08:24:45Z" }
