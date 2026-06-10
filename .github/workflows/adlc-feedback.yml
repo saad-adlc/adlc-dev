@@ -49,8 +49,15 @@ jobs:
             exit 0
           fi
 
-          # Skip comments from the agent itself
+          # Skip comments from the agent itself (by username)
           if [ "${{ github.event.comment.user.login }}" == "adlc-agent" ]; then
+            echo "is_adlc_pr=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Skip bot-generated comments regardless of which account posted them
+          COMMENT_BODY="${{ github.event.comment.body }}"
+          if echo "$COMMENT_BODY" | grep -qE "^(🔍 \*\*ADLC|🤔 \*\*ADLC|🔄 \*\*ADLC|✅ Iteration complete)"; then
             echo "is_adlc_pr=false" >> $GITHUB_OUTPUT
             exit 0
           fi
