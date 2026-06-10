@@ -22,7 +22,7 @@ jobs:
       - name: Checkout adlc-dev
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.ADLC_AGENT_TOKEN }}
 
       - name: Pull latest standards (CLAUDE.md + ai-dev/) from adlc-standards
         run: |
