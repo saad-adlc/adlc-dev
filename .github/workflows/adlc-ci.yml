@@ -100,3 +100,31 @@ jobs:
             fi
           done
           echo "✅ No banned packages"
+  adlc-status-clean:
+    name: Status -> clean
+    needs: [ci-node]
+    if: success() && startsWith(github.head_ref, 'feature/issue-')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.ADLC_AGENT_TOKEN }}
+      - name: Write clean status
+        run: |
+          BRANCH="${{ github.head_ref }}"
+          SLUG="${BRANCH#feature/}"
+          mkdir -p "workspaces/${SLUG}/.adlc"
+          cat > "workspaces/${SLUG}/.adlc/status.json" << JSON
+          { "stage": "clean", "phase": 8, "iteration": 0,
+            "pr": ${{ github.event.pull_request.number }},
+            "preview_url": null,
+            "detail": "All checks passed — deploying preview",
+            "updated": "$(date -u +%Y-%m-%dT%H:%M:%SZ)" }
+          JSON
+          git config user.name "adlc-agent"
+          git config user.email "adlc-agent@saad-adlc.com"
+          git add "workspaces/${SLUG}/.adlc/status.json"
+          git diff --cached --quiet || { git commit -m "chore(${SLUG}): status -> clean [skip ci]"; git push origin "${{ github.head_ref }}"; }

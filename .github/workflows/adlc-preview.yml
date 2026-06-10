@@ -34,6 +34,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          token: ${{ secrets.ADLC_AGENT_TOKEN }}
           fetch-depth: 0
           ref: ${{ github.event.workflow_run.head_sha }}
 
@@ -110,6 +111,28 @@ jobs:
             git commit -m "preview: PR #${{ steps.detect.outputs.pr_number }} — ${{ steps.detect.outputs.workspace }}"
             git push origin gh-pages
           fi
+
+      - name: Status -> preview-deployed
+        if: steps.detect.outputs.workspace != ''
+        env:
+          GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
+        run: |
+          BRANCH="${{ github.event.workflow_run.pull_requests[0].head.ref }}"
+          PR=${{ steps.detect.outputs.pr_number }}
+          SLUG="${BRANCH#feature/}"
+          mkdir -p "workspaces/${SLUG}/.adlc"
+          cat > "workspaces/${SLUG}/.adlc/status.json" << JSON
+          { "stage": "preview-deployed", "phase": 9, "iteration": 0, "pr": ${PR},
+            "preview_url": "${{ steps.detect.outputs.preview_url }}",
+            "detail": "Live preview deployed",
+            "updated": "$(date -u +%Y-%m-%dT%H:%M:%SZ)" }
+          JSON
+          git config user.name "adlc-agent"
+          git config user.email "adlc-agent@saad-adlc.com"
+          git fetch origin "$BRANCH"
+          git checkout "$BRANCH"
+          git add "workspaces/${SLUG}/.adlc/status.json"
+          git diff --cached --quiet || { git commit -m "chore(${SLUG}): status -> preview-deployed [skip ci]"; git push origin "$BRANCH"; }
 
       - name: Post preview URL as PR comment
         if: steps.detect.outputs.workspace != ''
