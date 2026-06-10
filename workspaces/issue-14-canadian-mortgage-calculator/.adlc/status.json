@@ -1,4 +1,5 @@
-{ "stage": "pr-open", "phase": 7, "iteration": 0, "pr": 15,
+{ "stage": "clean", "phase": 8, "iteration": 0,
+  "pr": 15,
   "preview_url": null,
-  "detail": "Built and packaged — automated checks running",
-  "updated": "2026-06-10T13:11:45Z" }
+  "detail": "All checks passed — deploying preview",
+  "updated": "2026-06-10T13:12:29Z" }
