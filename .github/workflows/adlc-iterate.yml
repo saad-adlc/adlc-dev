@@ -1,83 +1,261 @@
-# Deviations from PLAN.md (Task 2.2):
-#   - Key Vault step removed; Foundry key + agent token read directly from
-#     GitHub Actions secrets (FOUNDRY_API_KEY, GITHUB_AGENT_TOKEN) for the
-#     personal-GitHub POC.
-name: ADLC — Iterate on Feedback
+# ADLC — Iterate (Phase 8 self-healing loop)
+#
+# Mirrors adlc-generate.yml's Claude Code pattern (CLI via Azure Foundry).
+# Triggers:
+#   - adlc-ci fails on a feature/issue-* branch            → fix CI failure
+#   - reviewer requests changes on an ADLC PR               → address review
+#   - `adlc-iterate` label added to a PR                    → address review
+#   - `/adlc-iterate:` PR comment (chat relays business feedback this way)
+#
+# Cap: 3 iterations, counted from `iteration-` commits since main.
+# Status-only commits use [skip ci] so they never retrigger adlc-ci;
+# the actual fix push (via ADLC_AGENT_TOKEN) DOES retrigger it — that's the loop.
+#
+# Secrets reused from adlc-generate.yml: ADLC_AGENT_TOKEN, CLAUDE_API_KEY.
+
+name: ADLC — Iterate
 
 on:
+  workflow_run:
+    workflows: ["ADLC — CI"]
+    types: [completed]
   pull_request_review:
     types: [submitted]
+  pull_request:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+# Never run two iterations on the same repo concurrently — queue them
+concurrency:
+  group: adlc-iterate
+  cancel-in-progress: false
 
 jobs:
   iterate:
-    if: contains(github.event.pull_request.labels.*.name, 'adlc-iterate')
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
+    if: >
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'failure' &&
+       startsWith(github.event.workflow_run.head_branch, 'feature/issue-')) ||
+      (github.event_name == 'pull_request_review' &&
+       github.event.review.state == 'changes_requested' &&
+       startsWith(github.event.pull_request.head.ref, 'feature/issue-')) ||
+      (github.event_name == 'pull_request' &&
+       github.event.label.name == 'adlc-iterate' &&
+       startsWith(github.event.pull_request.head.ref, 'feature/issue-')) ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       startsWith(github.event.comment.body, '/adlc-iterate:'))
 
     steps:
+      - name: Resolve branch, PR, and task
+        id: ctx
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.ADLC_AGENT_TOKEN }}
+          script: |
+            let branch, pr, task;
+            if (context.eventName === 'workflow_run') {
+              branch = context.payload.workflow_run.head_branch;
+              const prs = await github.rest.pulls.list({ ...context.repo,
+                head: `${context.repo.owner}:${branch}`, state: 'open' });
+              pr = prs.data[0]?.number;
+              task = `CI failed on this branch. Run: gh run view ${context.payload.workflow_run.id} --log-failed  to read the failing check (typecheck / lint / test / coverage), then fix exactly that.`;
+            } else if (context.eventName === 'pull_request_review' ||
+                       context.eventName === 'pull_request') {
+              branch = context.payload.pull_request.head.ref;
+              pr = context.payload.pull_request.number;
+              task = `A reviewer requested changes on PR #${pr}. Run: gh pr view ${pr} --comments  and  gh api repos/${context.repo.owner}/${context.repo.repo}/pulls/${pr}/comments  to read all review feedback, then address every comment.`;
+            } else {
+              pr = context.payload.issue.number;
+              const prData = await github.rest.pulls.get({ ...context.repo, pull_number: pr });
+              if (prData.data.state !== 'open') { core.setFailed('PR is not open'); return; }
+              branch = prData.data.head.ref;
+              task = `Business-user feedback (apply exactly, minimally): ${context.payload.comment.body.replace('/adlc-iterate:', '').trim()}`;
+            }
+            if (!pr || !branch || !branch.startsWith('feature/issue-')) {
+              core.setFailed('No open ADLC PR for this event'); return;
+            }
+            core.setOutput('branch', branch);
+            core.setOutput('pr', String(pr));
+            core.setOutput('slug', branch.replace('feature/', ''));
+            core.setOutput('task', task);
+
       - name: Checkout feature branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.ref }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ steps.ctx.outputs.branch }}
+          token: ${{ secrets.ADLC_AGENT_TOKEN }}
+          fetch-depth: 0
 
-      - name: Pull latest standards (CLAUDE.md + ai-dev/) from adlc-standards
+      - name: Enforce iteration cap (3)
+        id: cap
         run: |
-          git clone https://x-access-token:${{ secrets.ADLC_AGENT_TOKEN }}@github.com/saad-adlc/adlc-standards.git _standards
+          git fetch origin main
+          # Count only iteration commits on THIS branch since main —
+          # never the full history (main commits must not burn the cap)
+          N=$(git log origin/main..HEAD --oneline | grep -c 'iteration-' || true)
+          echo "count=$N" >> $GITHUB_OUTPUT
+          echo "next=$((N + 1))" >> $GITHUB_OUTPUT
+          if [ "$N" -ge 3 ]; then echo "capped=true" >> $GITHUB_OUTPUT; fi
+
+      - name: Escalate — cap reached
+        if: steps.cap.outputs.capped == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
+        run: |
+          SLUG=${{ steps.ctx.outputs.slug }}
+          mkdir -p "workspaces/${SLUG}/.adlc"
+          cat > "workspaces/${SLUG}/.adlc/status.json" << JSON
+          { "stage": "escalated", "phase": 8, "iteration": 3,
+            "pr": ${{ steps.ctx.outputs.pr }}, "preview_url": null,
+            "detail": "Automatic fixing stopped after 3 attempts — human input needed",
+            "updated": "$(date -u +%Y-%m-%dT%H:%M:%SZ)" }
+          JSON
+          git config user.name "adlc-agent"
+          git config user.email "adlc-agent@saad-adlc.com"
+          git add "workspaces/${SLUG}/.adlc/status.json"
+          git commit -m "chore(${SLUG}): status -> escalated [skip ci]"
+          git push origin ${{ steps.ctx.outputs.branch }}
+          gh pr comment ${{ steps.ctx.outputs.pr }} \
+            --body "⚠️ **ADLC iterate: cap reached (3/3).** Human input needed — adjust the requirement via chat, or push a manual fix to this branch."
+
+      - name: Setup Node 20
+        if: steps.cap.outputs.capped != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Pull latest standards from adlc-standards
+        if: steps.cap.outputs.capped != 'true'
+        run: |
+          git clone \
+            https://x-access-token:${{ secrets.ADLC_AGENT_TOKEN }}@github.com/saad-adlc/adlc-standards.git \
+            _standards
           cp _standards/CLAUDE.md ./CLAUDE.md
           cp -r _standards/ai-dev ./ai-dev
+          mkdir -p .claude/commands
+          cp _standards/ai-dev/workflows/*.md .claude/commands/
 
-      - name: Collect PR feedback
+      - name: Install Claude Code
+        if: steps.cap.outputs.capped != 'true'
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Write status -> iterating (no push — committed with the fix)
+        if: steps.cap.outputs.capped != 'true'
+        run: |
+          SLUG=${{ steps.ctx.outputs.slug }}
+          mkdir -p "workspaces/${SLUG}/.adlc"
+          cat > "workspaces/${SLUG}/.adlc/status.json" << JSON
+          { "stage": "iterating", "phase": 8,
+            "iteration": ${{ steps.cap.outputs.next }},
+            "pr": ${{ steps.ctx.outputs.pr }}, "preview_url": null,
+            "detail": "Fixing — attempt ${{ steps.cap.outputs.next }} of 3",
+            "updated": "$(date -u +%Y-%m-%dT%H:%M:%SZ)" }
+          JSON
+
+      - name: Run Claude Code iterate agent
+        if: steps.cap.outputs.capped != 'true'
+        env:
+          CLAUDE_CODE_USE_FOUNDRY: "1"
+          ANTHROPIC_FOUNDRY_RESOURCE: orix-adastra-adlc
+          ANTHROPIC_FOUNDRY_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+          ANTHROPIC_DEFAULT_SONNET_MODEL: claude-sonnet-4-6
+          ANTHROPIC_DEFAULT_OPUS_MODEL: claude-opus-4-8
+          GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
+        run: |
+          WORKSPACE=workspaces/${{ steps.ctx.outputs.slug }}
+
+          printf 'You are the ADLC iterate agent — iteration %s of max 3 on PR #%s.
+
+          WORKSPACE: %s
+          Work ONLY inside this workspace. package-lock.json already exists —
+          do NOT run npm install. Do NOT touch workflows, root files, config
+          files, or other workspaces.
+
+          TASK:
+          %s
+
+          Rules:
+          1. Read CLAUDE.md and ai-dev/rules/react/style.md first
+          2. Read every file fully before editing it
+          3. Minimal fix only — no refactors, no new dependencies, no deleted tests
+          4. Run: cd %s && npm run ci
+          5. Fix until npm run ci passes
+          6. Update the "detail" field in %s/.adlc/status.json with a one-line
+             plain-English summary of what you fixed (keep stage "iterating")
+          7. Do NOT commit — the workflow handles git
+
+          ' \
+            "${{ steps.cap.outputs.next }}" "${{ steps.ctx.outputs.pr }}" \
+            "$WORKSPACE" \
+            "${{ steps.ctx.outputs.task }}" \
+            "$WORKSPACE" "$WORKSPACE" \
+            | claude --print \
+              --permission-mode bypassPermissions \
+              --allowed-tools "Write,Edit,Read,Bash,Glob,Grep" \
+            | tee iterate_log.txt
+
+      - name: Post agent output as PR comment
+        if: steps.cap.outputs.capped != 'true' && always()
         env:
           GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
         run: |
-          gh pr view ${{ github.event.pull_request.number }} \
-            --json reviews,comments,body \
-            > pr_feedback.json
+          if [ -s iterate_log.txt ]; then
+            gh pr comment ${{ steps.ctx.outputs.pr }} --body-file iterate_log.txt || true
+          fi
 
-      - name: Run iteration agent
-        env:
-          CLAUDE_CODE_USE_FOUNDRY: "1"
-          ANTHROPIC_FOUNDRY_RESOURCE: orix-adastra-adlc
-          ANTHROPIC_FOUNDRY_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
-          ANTHROPIC_DEFAULT_SONNET_MODEL: claude-sonnet-4-6
-          ANTHROPIC_DEFAULT_OPUS_MODEL: claude-opus-4-8
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+      - name: Commit and push fix
+        if: steps.cap.outputs.capped != 'true'
+        id: commit
         run: |
-          FEEDBACK=$(cat pr_feedback.json)
-          printf '/iterate %s %s\n' "$PR_NUMBER" "$FEEDBACK" | claude --print \
-            --permission-mode bypassPermissions \
-            --allowed-tools "Write,Edit,Read,Bash,Glob,Grep" \
-            | tee iteration_log.txt
-
-      - name: Validate iteration
-        env:
-          CLAUDE_CODE_USE_FOUNDRY: "1"
-          ANTHROPIC_FOUNDRY_RESOURCE: orix-adastra-adlc
-          ANTHROPIC_FOUNDRY_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
-          ANTHROPIC_DEFAULT_SONNET_MODEL: claude-sonnet-4-6
-          ANTHROPIC_DEFAULT_OPUS_MODEL: claude-opus-4-8
-        run: |
-          echo "/validate-output" | claude --print \
-            --permission-mode bypassPermissions \
-            --allowed-tools "Read,Bash,Glob,Grep" \
-            | tee validation_log.txt
-          grep -qi "FAIL" validation_log.txt && exit 1 || true
-
-      - name: Commit and push iteration
-        run: |
+          rm -rf _standards .claude ai-dev
+          rm -f CLAUDE.md iterate_log.txt
           git config user.name "adlc-agent"
-          git config user.email "adlc-agent@orix-adlc.com"
-          ITER=$(git log --oneline | grep -c "iteration" || echo 0)
+          git config user.email "adlc-agent@saad-adlc.com"
           git add -A
-          git commit -m "feat(adlc): iteration $((ITER+1)) — PR feedback addressed"
-          git push origin HEAD
+          if git diff --cached --quiet; then
+            echo "committed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          echo "committed=true" >> $GITHUB_OUTPUT
+          # Status.json rides along in this commit. This push (PAT) retriggers
+          # adlc-ci — exactly the loop we want: fix -> CI -> pass or iterate again.
+          git commit -m "fix(${{ steps.ctx.outputs.slug }}): iteration-${{ steps.cap.outputs.next }}
 
-      - name: Comment on PR
+          PR: #${{ steps.ctx.outputs.pr }}
+          Pipeline: ADLC iterate (Claude Code via Azure Foundry)
+          Model: claude-sonnet-4-6"
+          git push origin ${{ steps.ctx.outputs.branch }}
+
+      - name: Comment progress
+        if: steps.cap.outputs.capped != 'true' && steps.commit.outputs.committed == 'true'
         env:
           GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
         run: |
-          gh pr comment ${{ github.event.pull_request.number }} \
-            --body "✅ Iteration complete. New commit pushed — please re-review."
+          gh pr comment ${{ steps.ctx.outputs.pr }} \
+            --body "🔄 ADLC iterate: attempt ${{ steps.cap.outputs.next }}/3 pushed. CI is re-running."
+
+      - name: Comment if no changes were made
+        if: steps.cap.outputs.capped != 'true' && steps.commit.outputs.committed == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
+        run: |
+          gh pr comment ${{ steps.ctx.outputs.pr }} \
+            --body "ℹ️ ADLC iterate ran but made no changes — the agent may need clarification. See its output above."
+
+      - name: Notify workflow failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr comment ${{ steps.ctx.outputs.pr }} \
+            --body "⚠️ ADLC iterate workflow itself failed. Check [logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})." || true
