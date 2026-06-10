@@ -49,8 +49,30 @@ jobs:
             exit 0
           fi
 
-          # Skip comments from the agent itself
+          # Skip comments from the agent itself (by username)
           if [ "${{ github.event.comment.user.login }}" == "adlc-agent" ]; then
+            echo "is_adlc_pr=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Read comment body reliably from the event JSON file.
+          # Do NOT use ${{ github.event.comment.body }} inline in env: — multiline
+          # values and special characters cause YAML expansion to truncate or mangle
+          # the content, making the bot-comment filter below silently fail.
+          COMMENT_BODY=$(jq -r '.comment.body' < "$GITHUB_EVENT_PATH")
+
+          # Skip bot-generated comments regardless of which account posted them.
+          # Primary check: machine-readable HTML marker added to every bot comment body.
+          # Fallback: scan all lines for known bot message patterns (emoji prefix or text).
+          if echo "$COMMENT_BODY" | grep -qF "<!-- adlc-bot -->"; then
+            echo "is_adlc_pr=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          if echo "$COMMENT_BODY" | grep -qE "^\s*(🔍|🤔|🔄|✅)\s*\*\*ADLC"; then
+            echo "is_adlc_pr=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          if echo "$COMMENT_BODY" | grep -qE "(ADLC Preview deployed|ADLC — Clarification needed|ADLC — Iterating on your feedback|ADLC — Iteration complete)"; then
             echo "is_adlc_pr=false" >> $GITHUB_OUTPUT
             exit 0
           fi
@@ -179,19 +201,22 @@ jobs:
           if [ "${{ steps.commit.outputs.committed }}" == "true" ]; then
             gh pr comment ${{ needs.check-context.outputs.pr_number }} \
               --repo ${{ github.repository }} \
-              --body "🔄 **ADLC — Iterating on your feedback**
+              --body "<!-- adlc-bot -->
+🔄 **ADLC — Iterating on your feedback**
 
-          Your feedback has been applied and a new commit pushed.
+Your feedback has been applied and a new commit pushed.
 
-          > CI is running now. The preview will update automatically once it passes.
-          > Check the Checks tab to follow progress."
+> CI is running now. The preview will update automatically once it passes.
+> Check the Checks tab to follow progress."
           else
+            FEEDBACK_SNIPPET=$(jq -r '.comment.body' < "$GITHUB_EVENT_PATH" | head -3)
             gh pr comment ${{ needs.check-context.outputs.pr_number }} \
               --repo ${{ github.repository }} \
-              --body "🤔 **ADLC — Clarification needed**
+              --body "<!-- adlc-bot -->
+🤔 **ADLC — Clarification needed**
 
-          The agent needs a bit more detail to action your feedback.
-          Could you clarify what you'd like changed?
+The agent needs a bit more detail to action your feedback.
+Could you clarify what you'd like changed?
 
-          Your feedback: *${{ github.event.comment.body }}*"
+Your feedback (first 3 lines): *${FEEDBACK_SNIPPET}*"
           fi
