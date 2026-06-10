@@ -63,12 +63,16 @@ jobs:
 
           # Skip bot-generated comments regardless of which account posted them.
           # Primary check: machine-readable HTML marker added to every bot comment body.
-          # Fallback: emoji/text prefix match (kept for comments posted before this fix).
+          # Fallback: scan all lines for known bot message patterns (emoji prefix or text).
           if echo "$COMMENT_BODY" | grep -qF "<!-- adlc-bot -->"; then
             echo "is_adlc_pr=false" >> $GITHUB_OUTPUT
             exit 0
           fi
           if echo "$COMMENT_BODY" | grep -qE "^\s*(🔍|🤔|🔄|✅)\s*\*\*ADLC"; then
+            echo "is_adlc_pr=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          if echo "$COMMENT_BODY" | grep -qE "(ADLC Preview deployed|ADLC — Clarification needed|ADLC — Iterating on your feedback|ADLC — Iteration complete)"; then
             echo "is_adlc_pr=false" >> $GITHUB_OUTPUT
             exit 0
           fi
