@@ -152,8 +152,10 @@ jobs:
           git checkout "$BRANCH"
 
           mkdir -p "workspaces/${SLUG}/.adlc"
+          ITER=$(jq -r '.iteration // 0' "workspaces/${SLUG}/.adlc/status.json" 2>/dev/null || echo 0)
+          [ -z "$ITER" ] && ITER=0
           cat > "workspaces/${SLUG}/.adlc/status.json" << JSON
-          { "stage": "preview-deployed", "iteration": $(jq -r '.iteration // 0' "workspaces/${SLUG}/.adlc/status.json" 2>/dev/null || echo 0), "pr": ${PR},
+          { "stage": "preview-deployed", "iteration": ${ITER}, "pr": ${PR},
             "preview_url": "${{ steps.detect.outputs.preview_url }}",
             "detail": "Live preview deployed",
             "updated": "$(date -u +%Y-%m-%dT%H:%M:%SZ)" }
