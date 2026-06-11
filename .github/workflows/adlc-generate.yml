@@ -47,11 +47,16 @@ jobs:
         id: branch
         run: |
           ISSUE=${{ github.event.issue.number }}
-          SLUG=$(echo "${{ github.event.issue.title }}" \
-            | tr '[:upper:]' '[:lower:]' \
-            | tr ' ' '-' \
-            | tr -cd '[:alnum:]-' \
-            | cut -c1-40)
+          TITLE="${{ github.event.issue.title }}"
+          KEBAB=$(printf '%s' "$TITLE" \
+            | LC_ALL=C tr '[:upper:]' '[:lower:]' \
+            | LC_ALL=C sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')
+          if [ "${#KEBAB}" -gt 40 ]; then
+            KEBAB="${KEBAB:0:40}"
+            KEBAB=$(printf '%s' "$KEBAB" | sed -E 's/-[^-]*$//; s/-+$//')
+          fi
+          [ -z "$KEBAB" ] && KEBAB="feature"
+          SLUG="$KEBAB"
           BRANCH="feature/issue-${ISSUE}-${SLUG}"
           WORKSPACE="workspaces/issue-${ISSUE}-${SLUG}"
           git checkout -b "$BRANCH"
@@ -64,12 +69,12 @@ jobs:
         run: |
           cat > adlc-status.sh << 'SH'
           #!/bin/bash
-          # usage: SLUG=.. BRANCH=.. [PR=..] [PREVIEW_URL=..] ./adlc-status.sh <stage> <phase> <detail>
+          # usage: SLUG=.. BRANCH=.. [PR=..] [PREVIEW_URL=..] ./adlc-status.sh <stage> <detail>
           set -e
-          STAGE=$1; PHASE=$2; DETAIL=$3
+          STAGE=$1; DETAIL=$2
           mkdir -p "workspaces/${SLUG}/.adlc"
           cat > "workspaces/${SLUG}/.adlc/status.json" << JSON
-          { "stage": "${STAGE}", "phase": ${PHASE}, "iteration": ${ITER:-0},
+          { "stage": "${STAGE}", "iteration": ${ITER:-0},
             "pr": ${PR:-null},
             "preview_url": $( [ -n "$PREVIEW_URL" ] && echo "\"$PREVIEW_URL\"" || echo null ),
             "detail": "${DETAIL}",
@@ -255,7 +260,7 @@ jobs:
           git add "workspaces/${SLUG}"
           git commit -m "chore(${SLUG}): scaffold workspace [skip ci]"
           git push -u origin "${BRANCH}"
-          ./adlc-status.sh scaffolding 3 "Workspace created, dependencies installed"
+          ./adlc-status.sh scaffolding "Workspace created, dependencies installed"
 
       - name: Fetch issue context
         env:
@@ -274,7 +279,7 @@ jobs:
         env:
           SLUG: ${{ steps.branch.outputs.slug }}
           BRANCH: ${{ steps.branch.outputs.name }}
-        run: ./adlc-status.sh generating 5 "Writing tests and implementation, then validating"
+        run: ./adlc-status.sh generating "Writing tests and implementation, then validating"
 
       - name: Run Claude Code generation agent
         env:
@@ -395,7 +400,7 @@ jobs:
         run: |
           mkdir -p "workspaces/${SLUG}/.adlc"
           cat > "workspaces/${SLUG}/.adlc/status.json" << JSON
-          { "stage": "pr-open", "phase": 7, "iteration": 0, "pr": ${PR},
+          { "stage": "pr-open", "iteration": 0, "pr": ${PR},
             "preview_url": null,
             "detail": "Built and packaged — automated checks running",
             "updated": "$(date -u +%Y-%m-%dT%H:%M:%SZ)" }

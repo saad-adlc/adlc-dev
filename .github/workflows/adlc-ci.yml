@@ -117,8 +117,9 @@ jobs:
           BRANCH="${{ github.head_ref }}"
           SLUG="${BRANCH#feature/}"
           mkdir -p "workspaces/${SLUG}/.adlc"
+          ITER=$(jq -r '.iteration // 0' "workspaces/${SLUG}/.adlc/status.json" 2>/dev/null || echo 0)
           cat > "workspaces/${SLUG}/.adlc/status.json" << JSON
-          { "stage": "clean", "phase": 8, "iteration": 0,
+          { "stage": "clean", "iteration": ${ITER},
             "pr": ${{ github.event.pull_request.number }},
             "preview_url": null,
             "detail": "All checks passed — deploying preview",

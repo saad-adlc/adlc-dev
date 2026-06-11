@@ -113,7 +113,7 @@ jobs:
           SLUG=${{ steps.ctx.outputs.slug }}
           mkdir -p "workspaces/${SLUG}/.adlc"
           cat > "workspaces/${SLUG}/.adlc/status.json" << JSON
-          { "stage": "escalated", "phase": 8, "iteration": 3,
+          { "stage": "escalated", "iteration": 3,
             "pr": ${{ steps.ctx.outputs.pr }}, "preview_url": null,
             "detail": "Automatic fixing stopped after 3 attempts — human input needed",
             "updated": "$(date -u +%Y-%m-%dT%H:%M:%SZ)" }
@@ -155,7 +155,7 @@ jobs:
           SLUG=${{ steps.ctx.outputs.slug }}
           mkdir -p "workspaces/${SLUG}/.adlc"
           cat > "workspaces/${SLUG}/.adlc/status.json" << JSON
-          { "stage": "iterating", "phase": 8,
+          { "stage": "iterating",
             "iteration": ${{ steps.cap.outputs.next }},
             "pr": ${{ steps.ctx.outputs.pr }}, "preview_url": null,
             "detail": "Fixing — attempt ${{ steps.cap.outputs.next }} of 3",
@@ -191,14 +191,18 @@ jobs:
           4. Run: cd %s && npm run ci
           5. Fix until npm run ci passes
           6. Update the "detail" field in %s/.adlc/status.json with a one-line
-             plain-English summary of what you fixed (keep stage "iterating")
-          7. Do NOT commit — the workflow handles git
+             summary of what you fixed, in plain business language — NO file
+             paths, NO error codes, NO tool names (keep stage "iterating")
+          7. Append a dated entry to "## Change log" in %s/spec.md (create the
+             section if missing): "- [YYYY-MM-DD] iteration-N: [what changed,
+             in plain language, and what triggered it]"
+          8. Do NOT commit — the workflow handles git
 
           ' \
             "${{ steps.cap.outputs.next }}" "${{ steps.ctx.outputs.pr }}" \
             "$WORKSPACE" \
             "${{ steps.ctx.outputs.task }}" \
-            "$WORKSPACE" "$WORKSPACE" \
+            "$WORKSPACE" "$WORKSPACE" "$WORKSPACE" \
             | claude --print \
               --permission-mode bypassPermissions \
               --allowed-tools "Write,Edit,Read,Bash,Glob,Grep" \
