@@ -1,4 +1,6 @@
+import ExpenseTracker from './components/expense-tracker';
+
 /** App — root component. */
 export default function App() {
-  return <div id="app" />;
+  return <ExpenseTracker />;
 }
