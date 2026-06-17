@@ -1,5 +1,8 @@
-{ "stage": "clean", "iteration": 0,
+{
+  "stage": "deploying",
+  "iteration": 0,
   "pr": 25,
   "preview_url": null,
-  "detail": "All checks passed — deploying preview",
-  "updated": "2026-06-17T22:52:28Z" }
+  "detail": "Publishing the live preview",
+  "updated": "2026-06-17T22:52:42Z"
+}
