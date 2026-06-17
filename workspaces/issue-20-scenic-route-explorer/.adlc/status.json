@@ -1,8 +1,4 @@
-{
-  "stage": "deploying",
-  "iteration": 0,
-  "pr": 23,
-  "preview_url": null,
-  "detail": "Publishing the live preview",
-  "updated": "2026-06-17T16:04:06Z"
-}
+{ "stage": "preview-deployed", "iteration": 0, "pr": 23,
+  "preview_url": "https://saad-adlc.github.io/adlc-dev/previews/pr-23-issue-20-scenic-route-explorer/",
+  "detail": "Live preview deployed",
+  "updated": "2026-06-17T16:04:20Z" }
