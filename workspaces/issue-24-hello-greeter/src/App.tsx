@@ -1,4 +1,6 @@
+import HelloGreeter from './hello-greeter';
+
 /** App — root component. */
 export default function App() {
-  return <div id="app" />;
+  return <HelloGreeter />;
 }
