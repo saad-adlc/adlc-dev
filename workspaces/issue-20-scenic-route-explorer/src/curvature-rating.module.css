@@ -1,0 +1,13 @@
+.rating {
+  display: inline-flex;
+  gap: 1px;
+  font-size: 0.9rem;
+}
+
+.filled {
+  color: #f59e0b;
+}
+
+.empty {
+  color: #d1d5db;
+}
