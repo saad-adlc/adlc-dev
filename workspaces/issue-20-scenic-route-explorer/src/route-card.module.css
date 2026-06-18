@@ -1,0 +1,57 @@
+.card {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  cursor: pointer;
+  transition: box-shadow 0.15s;
+  align-items: flex-start;
+}
+
+.card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.card:focus {
+  outline: 2px solid #1e88e5;
+  outline-offset: 2px;
+}
+
+.mapCol {
+  flex-shrink: 0;
+}
+
+.infoCol {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.name {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meta {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #6b7280;
+}
+
+.stats {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #374151;
+}
+
+.reactions {
+  margin-top: 4px;
+}
