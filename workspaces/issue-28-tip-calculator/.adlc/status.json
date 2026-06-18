@@ -1,5 +1,4 @@
-{ "stage": "generating", "iteration": 0,
-  "pr": null,
+{ "stage": "pr-open", "iteration": 0, "pr": 29,
   "preview_url": null,
-  "detail": "Writing tests and implementation, then validating",
-  "updated": "2026-06-18T16:15:43Z" }
+  "detail": "Built and packaged — automated checks running",
+  "updated": "2026-06-18T16:19:46Z" }
