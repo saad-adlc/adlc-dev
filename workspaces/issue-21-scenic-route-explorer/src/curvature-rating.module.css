@@ -1,0 +1,12 @@
+.rating {
+  font-size: 0.95rem;
+  letter-spacing: 1px;
+}
+
+.filled {
+  color: #f59e0b;
+}
+
+.empty {
+  color: #d1d5db;
+}
