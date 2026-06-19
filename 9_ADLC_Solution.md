@@ -20,7 +20,7 @@ A single out-of-the-box repo was the goal — but none survives the constraints 
 | Enforcement & roles | **Claude Code hooks / subagents / skills** | platform | Deterministic `PreToolUse` deny (no merge to `main`, no secrets); per-phase roles + model routing |
 | Vendored skills | grill-me + handoff, `review-agent-governance`, TDD/verification | MIT | Intent capture, context handoff, signed-approval gate, behavioral discipline |
 
-> **Maturity note:** gh-aw is a GitHub **technical preview** (pre-1.0). We pin a release and vendor the compiled `*.lock.yml` (no runtime dependency on upstream); if it destabilizes, the design degrades gracefully to hand-rolled GitHub Actions + `claude-code-action`.
+> **Maturity note:** gh-aw is a GitHub **technical preview** (pre-1.0). We pin a release and vendor the compiled `*.lock.yml` (no runtime dependency on upstream). The hand-rolled GitHub Actions pipeline stays **always-wired alongside it (never parked)**: an `ADLC_ENGINE` repo-variable switch forces the proven `claude --print` path instantly, and a plain-Actions controller **auto-falls-back** to it after 2 consecutive gh-aw failures. So if gh-aw destabilizes, the design degrades gracefully — automatically, with no edits.
 
 ## Architecture
 

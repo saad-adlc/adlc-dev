@@ -30,7 +30,7 @@
    - `CLAUDE_API_KEY` — the Azure AI Foundry key, used by the **hand-rolled** workflows (resource method: `CLAUDE_CODE_USE_FOUNDRY` + `ANTHROPIC_FOUNDRY_API_KEY`).
    - `ANTHROPIC_API_KEY` — **for the gh-aw path**: same Foundry key value, under this name (gh-aw auto-injects it into the claude engine). Verified: with `ANTHROPIC_BASE_URL=https://orix-adastra-adlc.services.ai.azure.com/anthropic`, header `x-api-key` returns 200 for model `claude-sonnet-4-6`. gh-aw strict mode forbids the key in `engine.env`, so it must be this secret.
 4. 🖱️ `adlc-dev` → Settings → Secrets and variables → Actions → **Variables**. Create:
-   - `ADLC_ENGINE` = `gh-aw`  *(documentation/fallback switch — see step 27)*
+   - `ADLC_ENGINE` = `gh-aw`  *(real `if:`-guard switching the active engine: `gh-aw` = primary + auto-fallback; `legacy` = force the hand-rolled path. See §E / §L.)*
 5. 🖱️ `adlc-standards` → Settings → Secrets → add `ADLC_AGENT_TOKEN` (same PAT) so the **vendor-sync bot** can open PRs there.
 
 **Verify:** both secrets present in `adlc-dev`; `ADLC_ENGINE` variable visible; `adlc-standards` has the token.
@@ -67,18 +67,18 @@
 
 ---
 
-## E. gh-aw workflows + park the hand-rolled fallback (in `adlc-dev`)
+## E. gh-aw workflows + engine coexistence (always-wired hand-rolled fallback, in `adlc-dev`)
 
-> **Model:** gh-aw is primary; the hand-rolled `*.yml` are the **fallback**, parked on `workflow_dispatch` **as each gh-aw equivalent goes live** — staged, not all at once, so the pipeline never goes dark.
+> **Model:** gh-aw is primary; the hand-rolled `*.yml` stay **fully wired as an always-ready fallback (never parked)**. gh-aw and hand-rolled are mutually exclusive via an `ADLC_ENGINE` repo-variable `if:`-guard, and a plain-Actions controller (`adlc-failover.yml`) auto-falls-back after 2 gh-aw strikes. Detail: PLAN WS2 + `docs/superpowers/plans/2026-06-19-ws2-3-4-ghaw-spine.md` (T6/T7).
 
-13. ✅ **Done:** `gh aw init` run; `adlc-review.md` + `.lock.yml` committed and **merged to `main`**. It's additive (new governance gate) — nothing to park for it. Needs the `ANTHROPIC_API_KEY` secret (§B) to run.
-14. 🔜 **As each gh-aw replacement lands**, park its hand-rolled twin (`on:` → `workflow_dispatch` only, logic intact):
-    - `adlc-generate.yml`, `adlc-iterate.yml` → park once their gh-aw ports exist (PLAN WS2/WS3, decision pending)
-    - `adlc-ci.yml`, `adlc-preview.yml` → keep as real Actions (not agentic; not being ported)
-    - `adlc-security-iterate.yml`, `adlc-signals.yml` → keep until/if ported
-    **Currently nothing is parked** — all six still run; `adlc-review` runs alongside.
+13. ✅ **Done:** `gh aw init` run; `adlc-review.md` + `.lock.yml` committed and **merged to `main`**. Additive governance gate — no engine guard needed. Needs the `ANTHROPIC_API_KEY` secret (§B).
+14. 🔜 **As the gh-aw generate/iterate ports land** (PLAN WS2/WS3), wire coexistence — do **NOT** park:
+    - gh-aw `adlc-generate.md`/`adlc-iterate.md`: add `if: vars.ADLC_ENGINE != 'legacy'`.
+    - hand-rolled `adlc-generate.yml`/`adlc-iterate.yml`: add `workflow_dispatch` + gate the job to `github.event_name == 'workflow_dispatch' || vars.ADLC_ENGINE == 'legacy'` (logic untouched).
+    - add `adlc-failover.yml` (the 2-strike controller).
+    - `adlc-ci.yml`, `adlc-preview.yml`, `adlc-security-iterate.yml`, `adlc-signals.yml` → keep as real Actions (not agentic; not engine-switched).
 
-**Verify:** each parked `.yml` shows only a manual "Run workflow" button; no event triggers both a gh-aw lock workflow and its hand-rolled twin (no double-runs).
+**Verify:** with `ADLC_ENGINE` unset/`gh-aw`, labelling `adlc-generate` runs **only** the gh-aw lock workflow (hand-rolled job skips); setting `ADLC_ENGINE=legacy` makes the **same label** run **only** the hand-rolled; no event runs both (no double-run).
 
 ---
 
@@ -154,7 +154,7 @@
 
 ## L. Fallback procedure (if gh-aw misbehaves)
 
-28. 💻 Restore the hand-rolled engine: revert the `on:` blocks of the 6 parked workflows to their original triggers (git history has them), and disable the gh-aw workflows (rename `*.md`/remove `*.lock.yml` or set their `on:` to `workflow_dispatch`). Flip `ADLC_ENGINE` → `legacy` for clarity.
+28. 💻 **Force the hand-rolled engine:** set the repo variable **`ADLC_ENGINE = legacy`** — one flip, no workflow edits. The gh-aw workflows then skip (their `if: != 'legacy'` is false) and the hand-rolled run directly on the label (the proven `claude --print` path). For a *transient* gh-aw failure you usually don't need this — `adlc-failover.yml` already auto-falls-back after 2 strikes; `ADLC_ENGINE=legacy` is the hard, all-issues override. Reset to `gh-aw` (or unset) to re-enable gh-aw.
 
 **Verify:** labelling `adlc-generate` once more runs the proven `claude --print` hand-rolled path; no double-runs.
 

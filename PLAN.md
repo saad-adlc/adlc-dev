@@ -9,7 +9,7 @@
 
 **In scope** — close the doc-9 *governance/composition* gaps on top of the working runtime spine:
 
-- gh-aw orchestration (primary) with the hand-rolled workflows parked as fallback
+- gh-aw orchestration (primary) with the hand-rolled workflows **kept always-wired** as an auto-fallback (`ADLC_ENGINE` switch + 2-strike fail-over controller)
 - Spec-Kit spine in CI (full `specify → plan → tasks → implement` + `analyze` gate)
 - claude-code-action as the Claude-in-CI block (it is also gh-aw's `engine: claude`)
 - Deterministic `PreToolUse` deny hooks
@@ -65,13 +65,13 @@
 | # | Decision | Choice |
 |---|---|---|
 | D1 | Orchestration substrate | **Adopt gh-aw as primary**; keep hand-rolled workflows as fallback |
-| D2 | Fallback wiring | **Park hand-rolled on `workflow_dispatch`-only**; gh-aw owns the real triggers |
+| D2 | Fallback wiring | **No parking — both engines always wired**, mutually exclusive via an `ADLC_ENGINE` `if:`-guard; a plain-Actions controller auto-falls-back to hand-rolled after **2 gh-aw strikes** (or agent-BLOCKED); `ADLC_ENGINE=legacy` forces the proven path instantly |
 | D3 | Spec-Kit depth | **Full spine in CI, seeded by issue-body intent**; `analyze` is a pre-PR gate; spec/plan/tasks committed as audit trail |
 | D4 | Enforcement model | **bypassPermissions + hard `PreToolUse` deny hooks** (deny: push/merge to main, writes outside `workspaces/[slug]/`, secret patterns, dangerous Bash) |
 | D5 | Vendor sync | **Vendored in `adlc-standards` + scheduled sync-PR bot** (fork-and-own preserved; upstream upgrades surfaced as reviewable PRs) |
 | D6 | Intent runtime | **claude.ai web** (no Project); skills read from repo, not uploaded to a Project |
 | D7 | Bootstrap | **One packaged Claude Skill + GitHub MCP connector** (skill reads grill-me/handoff/orchestrator from the repo, live) |
-| D8 | Claude-in-CI | **Migrate to claude-code-action now** (= gh-aw `engine: claude`); parked fallback keeps proven `claude --print` |
+| D8 | Claude-in-CI | **Migrate to claude-code-action now** (= gh-aw `engine: claude`); the always-wired hand-rolled fallback keeps proven `claude --print` |
 | D9 | Sanitization | **GitHub-native**: CodeQL (SAST, enforced) + secret scanning push-protection (enforced) + Dependabot (alerts + auto-PRs) |
 | D10 | Approval gate | **Branch protection + business-approval as a required status check** + ≥1 code-owner review |
 | D11 | Governance review | **Automated PR review agent that informs the human gate** (requests changes / writes signed audit entry; never approves) |
@@ -97,7 +97,7 @@ adlc-standards  (read-only source of truth, vendored + pinned)         ┌─ ve
                                   │  (cloned at CI runtime, same as today)
                                   ▼
 adlc-dev  (workspace; PRs land on main, never auto-merged)
-  gh-aw workflows (*.md → *.lock.yml)  [PRIMARY]        hand-rolled *.yml  [FALLBACK, workflow_dispatch-only]
+  gh-aw workflows (*.md → *.lock.yml)  [PRIMARY]        hand-rolled *.yml  [FALLBACK — always wired; ADLC_ENGINE switch + 2-strike controller]
     generate → Spec-Kit specify/plan/tasks/implement (engine: claude = claude-code-action, Foundry)
        │  deny hooks active (PreToolUse)
        ▼
@@ -154,7 +154,7 @@ Each workstream lists: **deliverables**, **files touched**, **acceptance criteri
 
 ---
 
-### WS2 — gh-aw adoption (primary) + park hand-rolled (fallback)
+### WS2 — gh-aw adoption (primary) + engine coexistence (always-wired hand-rolled fallback)
 
 **Deliverables**
 - Install gh-aw, pin a release, vendor it (WS0). Author the orchestration as gh-aw markdown workflows in `adlc-dev/.github/workflows/*.md`, compiled to committed `*.lock.yml`:
@@ -163,16 +163,17 @@ Each workstream lists: **deliverables**, **files touched**, **acceptance criteri
   - `adlc-review.md` (PR opened/updated → review-agent-governance, WS6)
   - Keep `ci` and `preview` as plain Actions (no agent) — gh-aw is for the *agentic* jobs
 - gh-aw frontmatter sets `permissions: read-all` default + explicit `safe-outputs` (create-pull-request, add-comment) — this is doc-9's "read-only default + gated safe outputs"
-- **Park the 6 existing hand-rolled workflows**: change each `on:` to `workflow_dispatch` only (logic untouched). They remain the one-edit-away fallback.
-- Add repo variable `ADLC_ENGINE` (documentation/runbook switch) — value `gh-aw` in normal operation; flipping triggers back is the documented fallback procedure.
+- **Keep the hand-rolled workflows fully wired (NOT parked).** Make gh-aw and hand-rolled mutually exclusive via an `ADLC_ENGINE` repo-variable `if:`-guard: gh-aw runs when `ADLC_ENGINE != 'legacy'`; the hand-rolled run only when `ADLC_ENGINE == 'legacy'` (direct on label) or when `workflow_dispatch`-ed by the controller. No double-run; logic untouched.
+- **`ADLC_ENGINE` is a real guard, not documentation**: `gh-aw` (default) = gh-aw primary + auto-fallback; `legacy` = force the proven hand-rolled path instantly (one variable flip, no workflow edits).
+- **Fail-over controller** (`adlc-dev/.github/workflows/adlc-failover.yml`, plain Actions / engine-agnostic): on a gh-aw generate `workflow_run` failure, retry gh-aw once; on the **2nd strike or agent-BLOCKED**, `workflow_dispatch` the hand-rolled generator. Strikes/errors propagate via a run-context artifact + structured issue comments. Detail: `docs/superpowers/plans/2026-06-19-ws2-3-4-ghaw-spine.md` (T6/T7).
 
-**Files** new `adlc-dev/.github/workflows/*.md` + generated `*.lock.yml`; edit `on:` blocks of existing 6 `*.yml`
+**Files** new `adlc-dev/.github/workflows/*.md` + generated `*.lock.yml`; new `adlc-failover.yml`; add `ADLC_ENGINE`/`workflow_dispatch` guards to hand-rolled `adlc-generate.yml`/`adlc-iterate.yml` (logic untouched, **not parked**)
 
-**AC** — Labelling an issue `adlc-generate` fires **only** the gh-aw lock workflow (no double-run); the parked hand-rolled `adlc-generate.yml` runs only via manual dispatch; `gh aw compile` is clean and lock files are committed.
+**AC** — With `ADLC_ENGINE` default, labelling `adlc-generate` fires **only** the gh-aw lock workflow (hand-rolled job `if:` false → skips; no double-run); flipping `ADLC_ENGINE=legacy` makes the **same label** run **only** the hand-rolled; two gh-aw failures auto-dispatch the hand-rolled generator (the controller fires only after the run concludes — never mid-pipeline); `gh aw compile` is clean and lock files committed.
 
 **Infra dep** → INFRA steps: install `gh aw` extension; verify gh-aw runtime prerequisites; confirm `*.lock.yml` is what Actions executes.
 
-> **Risk:** gh-aw is pre-1.0. Mitigation: vendored + pinned (no live upstream dependency); fallback is the parked hand-rolled set, restored by reverting `on:` blocks.
+> **Risk:** gh-aw is pre-1.0. Mitigation: vendored + pinned (no live upstream dependency); the always-wired hand-rolled set is the fallback — engaged automatically by the 2-strike controller, or instantly by flipping `ADLC_ENGINE=legacy` (no workflow edits).
 
 ---
 
@@ -191,7 +192,7 @@ Each workstream lists: **deliverables**, **files touched**, **acceptance criteri
   ```
   The Foundry key is the GitHub secret **`ANTHROPIC_API_KEY`** (gh-aw auto-injects it; header `x-api-key` → 200 verified). Do **not** put the key in `engine.env` (strict mode blocks it) and do **not** use the resource method (`CLAUDE_CODE_USE_FOUNDRY`) — it can't be expressed in strict-mode gh-aw.
 - Slash commands currently piped to `claude --print` (`/iterate`, `/validate-output`) become gh-aw workflow bodies or `claude_args`-mounted commands from `adlc-standards/ai-dev/workflows/`
-- Parked fallback workflows **keep the proven `claude --print`** invocation unchanged
+- The always-wired hand-rolled fallback **keeps the proven `claude --print`** invocation unchanged
 
 **Files** the gh-aw `*.md` bodies (WS2)
 
@@ -271,7 +272,7 @@ Each workstream lists: **deliverables**, **files touched**, **acceptance criteri
 
 ```
 WS0 (vendoring foundation) ─┬─▶ WS1 (sync bot)
-                            ├─▶ WS2 (gh-aw + park fallback) ──▶ WS3 (claude-code-action, folded in)
+                            ├─▶ WS2 (gh-aw + engine coexistence) ──▶ WS3 (claude-code-action, folded in)
                             ├─▶ WS4 (deny hooks)        ┐
                             ├─▶ WS6 (review agent)      ├─ depend on WS2 workflows existing
                             └─▶ WS7 (intent skill)
@@ -293,7 +294,7 @@ A new feature, driven entirely from a fresh claude.ai chat, results in:
 4. review-agent-governance posts a governance review + signed audit entry; never approves.
 5. Merge blocked until ≥1 code-owner review **and** `adlc/business-approval` (business sign-off via `/adlc-approved`).
 6. After human merge, GitHub Pages preview is surfaced back in chat.
-7. Parked hand-rolled workflows restore the whole pipeline via reverting `on:` blocks if gh-aw misbehaves.
+7. The always-wired hand-rolled fallback takes over if gh-aw misbehaves — automatically after 2 strikes (controller), or instantly via `ADLC_ENGINE=legacy` — with no workflow edits.
 
 ---
 
