@@ -10,7 +10,12 @@ on:
 
 jobs:
   generate:
-    if: github.event.label.name == 'adlc-generate'
+    # Engine coexistence (NOT parked): run the proven hand-rolled generator when the
+    # fail-over controller routes here (adlc-fallback label), or when the operator has
+    # forced the legacy engine. In default gh-aw mode on an adlc-generate label this is
+    # false -> gh-aw owns it (no double-run). Both cases are real `issues: labeled`
+    # events, so github.event.issue.* is fully populated and the job logic is unchanged.
+    if: github.event.label.name == 'adlc-fallback' || (github.event.label.name == 'adlc-generate' && vars.ADLC_ENGINE == 'legacy')
     runs-on: ubuntu-latest
     permissions:
       contents: write
