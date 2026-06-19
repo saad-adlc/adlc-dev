@@ -1,0 +1,63 @@
+# ADLC — Signals (Phase 10 conventions)
+#
+# Two chat-issued PR comments become repo actions:
+#   /adlc-approved: <summary>            → label `adlc-approved` (merge signal)
+#   Rolled back for spec revision: <why> → close the PR (build retired)
+#
+# Guarded to feature/issue-* PRs. Does NOT collide with adlc-iterate.yml —
+# its issue_comment guard only matches comments starting `/adlc-iterate:`.
+
+name: ADLC — Signals
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  pull-requests: write
+  issues: write
+
+jobs:
+  approve:
+    name: Business-user approval
+    if: >
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/adlc-approved:')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify ADLC PR, label, confirm
+        env:
+          GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
+        run: |
+          PR=${{ github.event.issue.number }}
+          BRANCH=$(gh pr view "$PR" --repo ${{ github.repository }} --json headRefName --jq .headRefName)
+          case "$BRANCH" in feature/issue-*) ;; *) echo "Not an ADLC PR — ignoring"; exit 0;; esac
+
+          # Create the label if it doesn't exist yet (422 = already there)
+          gh api --method POST "/repos/${{ github.repository }}/labels" \
+            -f name="adlc-approved" -f color="0E8A16" \
+            -f description="Business user approved the live preview — ready to merge" \
+            2>/dev/null || true
+
+          gh pr edit "$PR" --repo ${{ github.repository }} --add-label adlc-approved
+
+          gh pr comment "$PR" --repo ${{ github.repository }} \
+            --body "✅ **Business user approved** the live preview. This PR is ready for engineering review and merge."
+
+  rollback:
+    name: Spec rollback — retire PR
+    if: >
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, 'Rolled back for spec revision:')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify ADLC PR and close it
+        env:
+          GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
+        run: |
+          PR=${{ github.event.issue.number }}
+          BRANCH=$(gh pr view "$PR" --repo ${{ github.repository }} --json headRefName --jq .headRefName)
+          case "$BRANCH" in feature/issue-*) ;; *) echo "Not an ADLC PR — ignoring"; exit 0;; esac
+
+          gh pr close "$PR" --repo ${{ github.repository }} \
+            --comment "🔄 **Retired for spec revision.** A new spec is being confirmed in chat; the rebuild will arrive as a NEW issue and PR. The feature branch is kept for reference."
