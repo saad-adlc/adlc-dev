@@ -129,6 +129,14 @@ When each gh-aw twin goes live, change the hand-rolled `.yml`'s `on:` to `workfl
 - **gh-aw custom `steps:` + create_pull_request capturing pre-agent file changes** → must verify the PR diff includes deterministic scaffolding, not just agent edits. Validate during the gh-aw compile/dry-run task before relying on it.
 - **Headless deny hooks under `bypassPermissions`** → `PreToolUse` fires regardless of permission mode; mount step copies settings before the agent runs.
 
+## Addendum (2026-06-19) — gh-aw mechanics verified against v0.79.8 source
+
+Research against the pinned gh-aw source corrected three design assumptions; **Plan 2 reflects the verified mechanics** (see `docs/superpowers/plans/2026-06-19-ws2-3-4-ghaw-spine.md`):
+
+- **G6 superseded:** `create-pull-request` is **commit-based**, not working-tree, and there is no literal `branch:` field. The deterministic branch name is set by the **pre-agent step** (`git checkout -b feature/issue-<N>-<slug>`); the agent commits on it; `preserve-branch-name: true` + `allowed-branches: [feature/*]` keep it exact. PR title via `title-prefix`.
+- **G5 refined:** gh-aw runs the `claude` CLI under `--permission-mode acceptEdits` (not `bypassPermissions`). The PreToolUse deny hook **does execute** in this engine (proven by gh-aw's own run log), but the **primary** deterministic enforcement is gh-aw-native: `--allowed-tools`, **Protected Files** (blocks `.github/`, `.claude/`, `CLAUDE.md`, `CODEOWNERS`, manifests — basename-matched), the AWF firewall, and the architecture (the agent has **no push credentials**; only the safe-outputs job writes, to feature/PR branches, never `main`). The deny hook is a **layered** control with an empirical verify-loads step.
+- **New constraint:** Protected Files is basename-matched, so the scaffold's `package.json`/`package-lock.json` must be `exclude`d on `create-pull-request`; cloned standards + mounted `.claude/` are kept out of the agent's commit via `.git/info/exclude`.
+
 ## Self-review notes
 
 - Placeholder scan: none — every file path and behavior is concrete.
