@@ -257,10 +257,11 @@ Each workstream lists: **deliverables**, **files touched**, **acceptance criteri
 - A single thin **`ADLC` Claude Skill** uploaded to claude.ai that bootstraps: "read `skills/grill-me`, `skills/handoff`, and the orchestrator rules from `saad-adlc/adlc-dev` (or `adlc-standards`) via the GitHub MCP connector and follow them." Everything substantive stays vendored in the repo.
 - Confirm `grill-me` and `handoff` skills exist in the repo (grill-me is at root today → move/copy into `adlc-standards/skills/` per WS0 so the sync-bot owns it)
 - Flow: intent → Artifacts preview → create labelled issue (`adlc-generate`) → pipeline; final GitHub Pages preview surfaced back in chat (unchanged from today)
+- **Live-progress monitor loop** — the skill polls an observable signal (~45s) and narrates one plain-English line per state change, ending at the clickable Pages preview. **This is what makes the pipeline "look live" in the UI** — a consumer-side property, not a CI one. Design + signal-timeline mapping: **`docs/superpowers/2026-06-19-ws7-live-ui-design.md`**. Key point: PR-open→preview liveness comes from **native GitHub events** (PR/checks/Pages) for free; only the pre-PR "generating" narration depends on WS2's live `status.json` pushes — so the live UI degrades gracefully if WS2 falls back to reduced status.
 
 **Files** the packaged skill (uploaded to claude.ai, source kept in `adlc-standards/skills/adlc-bootstrap/`)
 
-**AC** — From a fresh claude.ai chat (no Project), invoking the skill reads grill-me from the repo, runs the interview, renders an Artifacts preview, and opens a correctly-labelled issue whose body is a complete spec.
+**AC** — From a fresh claude.ai chat (no Project), invoking the skill reads grill-me from the repo, runs the interview, renders an Artifacts preview, and opens a correctly-labelled issue whose body is a complete spec. **Live-UI AC** (see the WS7 live-UI design note): the skill narrates ≥3 distinct progress lines across a real build, surfaces the clickable preview from the authoritative `preview_url`, stops cleanly on `escalated`/`deploy-failed`, and still produces a live PR→preview progression when only native events are available.
 
 **Infra dep** → INFRA steps: install/authorize the GitHub MCP connector on the `saad-adlc` org with write scope; upload the packaged Skill.
 
