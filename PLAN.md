@@ -39,17 +39,20 @@
 - ℹ️ **Old vs new:** issues/PRs #1–#19 are **old-implementation** artifacts (claude.ai chat orchestrator). They prove the CI workflows work; they say nothing about the new doc-9 intent capture, so **WS7 is net-new**, not "already working."
 - 🔧 **Already done (this effort):** WS0/WS1 vendoring — building blocks pinned in `adlc-standards` (PR `adlc-standards#1`); `gh aw` extension installed and pinned to `v0.79.8`; `adlc-security-iterate` guard fixed.
 - ✅ **gh-aw + Foundry verified (2026-06-18):** a gh-aw `adlc-review` workflow compiles clean, and the Foundry auth path is proven with a live 200: `ANTHROPIC_BASE_URL=https://orix-adastra-adlc.services.ai.azure.com/anthropic` + the key as the **`ANTHROPIC_API_KEY`** secret (header `x-api-key`), model `claude-sonnet-4-6`. Strict mode is satisfied (no secret in `engine.env`); gh-aw's proxy routes to the Foundry host. **The resource method (`CLAUDE_CODE_USE_FOUNDRY`) is NOT usable in gh-aw under strict mode** — base-URL is the path.
+- ✅ **WS0 complete (2026-06-19):** constitution + steering set + deterministic `PreToolUse` deny hook built **TDD** on `adlc-standards@ws-doc9-standards` (**40 hook tests green**, Opus code-reviewed — 1 Critical + 5 Important fixed — PR open). The hook fails **closed** and still denies under `bypassPermissions`. `CLAUDE.md` refactored to defer (no duplicated rules). Supersedes the earlier unmerged `ws0-constitution-steering-hooks` branch. Record: `docs/superpowers/2026-06-19-ws0-completion-record.md`.
 
 ---
 
-## 1b. Status (2026-06-18)
+## 1b. Status (2026-06-19)
 
-**Done:** vendoring (WS0/WS1 part) — PR `adlc-standards#1`; `gh aw` pinned v0.79.8; Foundry path verified; **`adlc-review` gh-aw workflow merged to `main`** (WS6 reviewer); `adlc-security-iterate` guard fixed (uncommitted).
+**Done:** vendoring (WS0/WS1 part) — PR `adlc-standards#1`; `gh aw` pinned v0.79.8; Foundry path verified; **`adlc-review` gh-aw workflow merged to `main`** (WS6 reviewer); `adlc-security-iterate` guard fixed (uncommitted); **WS0 — constitution + steering + deny hooks COMPLETE** (`adlc-standards@ws-doc9-standards`, PR open; 40 hook tests, Opus-reviewed; see `docs/superpowers/2026-06-19-ws0-completion-record.md`).
+
+**Decisions locked (grill, 2026-06-19):** Spec-Kit depth = **structured artifacts** — the generate agent commits `spec.md`+`plan.md`+`tasks.md` + runs an analyze-style self-check, on the proven claude-code-action path (full slash-command spine deferred). Session slice = **foundation + agentic spine** (WS0 → WS4 → WS2/WS3). Design: `docs/superpowers/specs/2026-06-19-doc9-foundation-agentic-spine-design.md`.
 
 **Remaining:**
-- ~~WS0 — constitution + steering + deny hooks~~ ✅ authored (branch `ws0-constitution-steering-hooks`). Left: **wire deny hooks into CI (WS4)** + point `adlc-review` at these files.
+- ~~WS0 — constitution + steering + deny hooks~~ ✅ **DONE** (`ws-doc9-standards`, PR open). The deny-hook script + `settings.template.json` exist; **mounting/wiring them into CI is WS4** (folded into Plan 2).
+- **WS2/WS3/WS4 — port generate + iterate to gh-aw + mount deny hooks** *(Plan 2 — drafting next; `adlc-dev@ws-doc9-impl`). Decision resolved: port **both** to gh-aw now.*
 - WS1 — vendor-sync bot
-- WS2/WS3 — port generate/iterate to gh-aw *(decision pending; deterministic-heavy)*
 - WS5 — commit guard fix; add Dependabot + secret-scan push protection; CodeQL → required check
 - WS6 — branch protection + `adlc/business-approval` required check + `CODEOWNERS`
 - WS7 — packaged claude.ai Skill + MCP intent capture
