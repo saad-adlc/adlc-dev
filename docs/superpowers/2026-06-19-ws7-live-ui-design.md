@@ -47,15 +47,17 @@ So the WS2 live-status engineering (grill Q1) buys exactly one thing in the UI: 
 ## What WS7 should poll (recommendation)
 
 Poll a **blend**, preferring native events for robustness:
-- **Pre-PR (`scaffolding`/`generating`):** read `workspaces/<slug>/.adlc/status.json` on the feature branch (depends on WS2's live pushes existing). If WS2 falls back to reduced status, this phase simply shows "Setting up…" until the PR appears — acceptable.
+- **Pre-PR (`scaffolding`/`generating`):** WS2 (per the source review) commits `scaffolding` into the agent's commit, so it only appears at PR time — **not live**. The feature branch cannot carry live pre-PR status because `create-pull-request` rebuilds it from a bundle (an early push would be excluded and ship a scaffold-less PR). For *live* pre-PR narration, use a **decoupled channel** that doesn't touch the feature branch: gh-aw's **activation status comment** (`add-comment` with `target: status`, which gh-aw can update in place), or a dedicated CI-edited issue comment, or skill-side elapsed-time narration. Until one is built, this phase shows "Setting up…" until the PR appears — acceptable.
 - **PR-open → preview:** read **native signals** — PR existence (by head branch `feature/issue-<N>-<slug>`), check-run conclusions, and the preview comment / Pages deployment. These don't depend on status.json at all.
 - **Preview link:** always read from `status.json.preview_url` (HANDOFF §12.10 — the URL is authoritative, never hand-constructed) or the preview PR comment.
 
 This makes the live UI **resilient to the WS2 status decision**: full status.json gives the richest narration; native-event polling alone still produces a live PR→preview experience.
 
-## Interaction with the WS2 fallback (Q1 / Plan 2 Task 7)
+## Interaction with WS2 (Q1 → resolved after source review)
 
-If the live-status ↔ bundle interaction proves fragile (Plan 2 T7 Step 3) and WS2 falls back to reduced status (Fallback B), the UI **still looks live from PR-open onward** via native events. The only loss is the "Writing your app…" narration in the first ~15 min — the user would see "Setting up…" then, after a gap, "Built — checks running." **Conclusion:** the early-phase live-status push is a *nice-to-have* for narration density, not a prerequisite for a live-feeling UI. WS7's native-event polling is the load-bearing part.
+The gh-aw source review **confirmed** the early-push-to-feature-branch mechanism is incompatible with `create-pull-request` (it bundles `origin/<branch>..<branch>`, so early-pushed commits are excluded → a scaffold-less PR). So **WS2 generate uses Fallback B = reduced branch status** (`scaffolding` appears at PR time, then `pr-open`). The UI **still looks live from PR-open onward** via native events; the only thing the branch can't provide is the "Writing your app…" narration in the first ~15 min.
+
+**Therefore live pre-PR narration, if wanted, is a WS7 responsibility via the decoupled channel above — never the feature branch.** WS7's native-event polling remains the load-bearing part of liveness; the decoupled pre-PR channel is an optional enhancement, not a prerequisite for a live-feeling UI. (Iterate is different: `iterating`/`escalated` *are* live on the branch, because `push-to-pull-request-branch` appends to the existing PR branch rather than rebuilding it.)
 
 ## WS7 acceptance additions (live-UI specific)
 
