@@ -1,0 +1,66 @@
+name: ADLC — Fail-over Controller
+# Plain Actions (engine-agnostic — never depends on gh-aw). Watches gh-aw generate
+# failures: retry gh-aw once (transient), then on the 2nd strike or agent-BLOCKED
+# route the issue to the proven hand-rolled generator via the `adlc-fallback` label.
+on:
+  workflow_run:
+    workflows: ["ADLC Generate"]      # MUST match the gh-aw generate workflow's name:
+    types: [completed]
+
+permissions:
+  actions: read       # download the failed run's artifacts/logs
+  contents: read
+  issues: write       # strike comments + add the adlc-fallback label
+
+jobs:
+  failover:
+    # Only on a gh-aw generate FAILURE, and only while gh-aw is the active engine.
+    if: github.event.workflow_run.conclusion == 'failure' && vars.ADLC_ENGINE != 'legacy'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download run-context artifact (run -> issue)
+        uses: actions/download-artifact@v4
+        with:
+          name: adlc-context
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.ADLC_AGENT_TOKEN }}
+          path: ctx
+      - name: Decide + propagate
+        env:
+          GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -uo pipefail
+          ISSUE="$(jq -r '.issue' ctx/adlc-context.json)"
+          if [ -z "$ISSUE" ] || [ "$ISSUE" = "null" ]; then echo "no issue in context; abort"; exit 0; fi
+
+          # Error summary from the failed run's logs (best-effort; never fail the controller).
+          gh run view "$RUN_ID" --repo "$REPO" --log-failed > run.log 2>/dev/null || true
+          ERR="$(tail -c 1200 run.log | tr '\n\r"' '   ')"
+
+          # Classify: agent BLOCKED / needs-clarification => do NOT retry (bad input won't improve).
+          BLOCKED=false
+          if grep -qiE 'BLOCKED|NEEDS_CONTEXT|clarif|ambiguous' run.log; then BLOCKED=true; fi
+
+          # Strike count = number of prior structured attempt comments on the issue.
+          N="$(gh issue view "$ISSUE" --repo "$REPO" --json comments \
+                --jq '[.comments[].body | select(startswith("<!-- adlc-attempt"))] | length')"
+          STRIKE=$((N + 1))
+
+          BODY="$(printf '<!-- adlc-attempt n=%s engine=gh-aw conclusion=failure run=%s -->\n⚠️ ADLC generate (gh-aw) attempt %s failed. Summary: %s' "$STRIKE" "$RUN_ID" "$STRIKE" "${ERR:0:280}")"
+          gh issue comment "$ISSUE" --repo "$REPO" --body "$BODY"
+
+          if [ "$BLOCKED" = "true" ] || [ "$STRIKE" -ge 2 ]; then
+            if [ "$BLOCKED" = "true" ]; then REASON="agent blocked / needs clarification"; else REASON="${STRIKE} strikes"; fi
+            gh issue comment "$ISSUE" --repo "$REPO" --body "$(printf '↩️ Falling back to the proven hand-rolled generator (%s).' "$REASON")"
+            # Ensure the routing label exists, then apply it -> fires the hand-rolled (real issue event).
+            gh label create adlc-fallback --repo "$REPO" --color B60205 \
+              --description "ADLC: route this issue to the hand-rolled generator" 2>/dev/null || true
+            gh issue edit "$ISSUE" --repo "$REPO" --add-label adlc-fallback
+          else
+            # Transient: retry gh-aw by re-applying the label (re-fires its labeled trigger).
+            gh issue edit "$ISSUE" --repo "$REPO" --remove-label adlc-generate || true
+            sleep 3
+            gh issue edit "$ISSUE" --repo "$REPO" --add-label adlc-generate
+          fi

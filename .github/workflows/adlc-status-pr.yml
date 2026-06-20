@@ -1,0 +1,34 @@
+name: ADLC — Status PR-Open
+on:
+  pull_request:
+    types: [opened]
+
+jobs:
+  status:
+    if: >
+      contains(github.event.pull_request.labels.*.name, 'adlc-generated') &&
+      startsWith(github.event.pull_request.head.ref, 'feature/issue-')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.ADLC_AGENT_TOKEN }}
+      - name: Write status -> pr-open
+        run: |
+          set -uo pipefail
+          SLUG="${{ github.event.pull_request.head.ref }}"; SLUG="${SLUG#feature/}"
+          WS="workspaces/${SLUG}"
+          mkdir -p "$WS/.adlc"
+          cat > "$WS/.adlc/status.json" <<JSON
+          { "stage": "pr-open", "iteration": 0, "pr": ${{ github.event.pull_request.number }},
+            "preview_url": null, "detail": "Built and packaged — automated checks running",
+            "updated": "$(date -u +%Y-%m-%dT%H:%M:%SZ)" }
+          JSON
+          git config user.name adlc-agent
+          git config user.email adlc-agent@saad-adlc.com
+          git add "$WS/.adlc/status.json"
+          git commit -m "chore(${SLUG}): status -> pr-open [skip ci]"
+          git push origin "${{ github.event.pull_request.head.ref }}"
