@@ -74,8 +74,8 @@
 13. ✅ **Done:** `gh aw init` run; `adlc-review.md` + `.lock.yml` committed and **merged to `main`**. Additive governance gate — no engine guard needed. Needs the `ANTHROPIC_API_KEY` secret (§B).
 14. 🔜 **As the gh-aw generate/iterate ports land** (PLAN WS2/WS3), wire coexistence — do **NOT** park:
     - gh-aw `adlc-generate.md`/`adlc-iterate.md`: add `if: vars.ADLC_ENGINE != 'legacy'`.
-    - hand-rolled `adlc-generate.yml`/`adlc-iterate.yml`: add `workflow_dispatch` + gate the job to `github.event_name == 'workflow_dispatch' || vars.ADLC_ENGINE == 'legacy'` (logic untouched).
-    - add `adlc-failover.yml` (the 2-strike controller).
+    - hand-rolled `adlc-generate.yml`: gate the `generate` job to `github.event.label.name == 'adlc-fallback' || (github.event.label.name == 'adlc-generate' && vars.ADLC_ENGINE == 'legacy')`. hand-rolled `adlc-iterate.yml`: wrap its compound job `if:` with `vars.ADLC_ENGINE == 'legacy' && ( … )`. `on:` + logic untouched.
+    - add `adlc-failover.yml` (the 2-strike controller; routes to hand-rolled via the `adlc-fallback` label, which it creates if missing).
     - `adlc-ci.yml`, `adlc-preview.yml`, `adlc-security-iterate.yml`, `adlc-signals.yml` → keep as real Actions (not agentic; not engine-switched).
 
 **Verify:** with `ADLC_ENGINE` unset/`gh-aw`, labelling `adlc-generate` runs **only** the gh-aw lock workflow (hand-rolled job skips); setting `ADLC_ENGINE=legacy` makes the **same label** run **only** the hand-rolled; no event runs both (no double-run).
