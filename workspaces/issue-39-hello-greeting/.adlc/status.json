@@ -1,8 +1,4 @@
-{
-  "stage": "deploying",
-  "iteration": 0,
-  "pr": 40,
-  "preview_url": null,
-  "detail": "Publishing the live preview",
-  "updated": "2026-06-22T17:00:33Z"
-}
+{ "stage": "preview-deployed", "iteration": 0, "pr": 40,
+  "preview_url": "https://saad-adlc.github.io/adlc-dev/previews/pr-40-issue-39-hello-greeting/",
+  "detail": "Live preview deployed",
+  "updated": "2026-06-22T17:00:46Z" }
