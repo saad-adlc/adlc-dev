@@ -1,8 +1,4 @@
-{
-  "stage": "deploying",
-  "iteration": 0,
-  "pr": 42,
-  "preview_url": null,
-  "detail": "Publishing the live preview",
-  "updated": "2026-06-22T17:54:30Z"
-}
+{ "stage": "preview-deployed", "iteration": 0, "pr": 42,
+  "preview_url": "https://saad-adlc.github.io/adlc-dev/previews/pr-42-issue-41-portfolio-dashboard/",
+  "detail": "Live preview deployed",
+  "updated": "2026-06-22T17:54:43Z" }
