@@ -57,7 +57,7 @@ This makes the live UI **resilient to the WS2 status decision**: full status.jso
 
 The gh-aw source review **confirmed** the early-push-to-feature-branch mechanism is incompatible with `create-pull-request` (it bundles `origin/<branch>..<branch>`, so early-pushed commits are excluded → a scaffold-less PR). So **WS2 generate uses Fallback B = reduced branch status** (`scaffolding` appears at PR time, then `pr-open`). The UI **still looks live from PR-open onward** via native events; the only thing the branch can't provide is the "Writing your app…" narration in the first ~15 min.
 
-**Therefore live pre-PR narration, if wanted, is a WS7 responsibility via the decoupled channel above — never the feature branch.** WS7's native-event polling remains the load-bearing part of liveness; the decoupled pre-PR channel is an optional enhancement, not a prerequisite for a live-feeling UI. (Iterate is different: `iterating`/`escalated` *are* live on the branch, because `push-to-pull-request-branch` appends to the existing PR branch rather than rebuilding it.)
+**Therefore live pre-PR narration, if wanted, is a WS7 responsibility via the decoupled channel above — never the feature branch.** WS7's native-event polling remains the load-bearing part of liveness; the decoupled pre-PR channel is an optional enhancement, not a prerequisite for a live-feeling UI. (Iterate is different: it's **hand-rolled** — a plain workflow, not gh-aw — so `iterating`/`escalated` *are* live on the branch via its own `contents: write` push. gh-aw strict mode bans that `contents: write`, which is exactly why iterate was not ported.)
 
 ## WS7 acceptance additions (live-UI specific)
 

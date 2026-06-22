@@ -51,7 +51,7 @@
 
 **Remaining:**
 - ~~WS0 — constitution + steering + deny hooks~~ ✅ **DONE** (`ws-doc9-standards`, PR open). The deny-hook script + `settings.template.json` exist; **mounting/wiring them into CI is WS4** (folded into Plan 2).
-- **WS2/WS3/WS4 — port generate + iterate to gh-aw + mount deny hooks** *(Plan 2 — drafting next; `adlc-dev@ws-doc9-impl`). Decision resolved: port **both** to gh-aw now.*
+- ✅ **WS2/WS3/WS4 — gh-aw generate spine MERGED** (`ws-doc9-impl` → `main`): gh-aw generate + 2-strike fail-over controller + `ADLC_ENGINE` override + WS4 deny-hook mount. **Iterate stays hand-rolled** — NOT ported, because gh-aw strict mode bans the `contents: write` its deterministic cap-3 + status pushes need (would violate G8). *Pending activation:* `gh aw compile adlc-generate --approve` (lock file), set `ADLC_ENGINE`, run the T8 smoke. Plan: `docs/superpowers/plans/2026-06-19-ws2-3-4-ghaw-spine.md`.
 - WS1 — vendor-sync bot
 - WS5 — commit guard fix; add Dependabot + secret-scan push protection; CodeQL → required check
 - WS6 — branch protection + `adlc/business-approval` required check + `CODEOWNERS`
@@ -159,7 +159,7 @@ Each workstream lists: **deliverables**, **files touched**, **acceptance criteri
 **Deliverables**
 - Install gh-aw, pin a release, vendor it (WS0). Author the orchestration as gh-aw markdown workflows in `adlc-dev/.github/workflows/*.md`, compiled to committed `*.lock.yml`:
   - `adlc-generate.md` (label `adlc-generate`) → §WS3 + WS_Spec-Kit body
-  - `adlc-iterate.md` (CI failure / review / `/adlc-iterate:` comment)
+  - ~~`adlc-iterate.md`~~ → **NOT ported**; iterate stays hand-rolled (`adlc-iterate.yml`), because gh-aw strict mode bans the `contents: write` its deterministic cap-3/status pushes need. It handles CI failure / review / `/adlc-iterate:` for PRs from either generator.
   - `adlc-review.md` (PR opened/updated → review-agent-governance, WS6)
   - Keep `ci` and `preview` as plain Actions (no agent) — gh-aw is for the *agentic* jobs
 - gh-aw frontmatter sets `permissions: read-all` default + explicit `safe-outputs` (create-pull-request, add-comment) — this is doc-9's "read-only default + gated safe outputs"
@@ -208,7 +208,7 @@ Each workstream lists: **deliverables**, **files touched**, **acceptance criteri
   - `Write`/`Edit` outside `workspaces/<slug>/` (and never `.github/`, root config, other workspaces)
   - secret/credential patterns in file writes (key/token/password regexes)
   - dangerous Bash (`rm -rf /`, `curl … | bash`, etc.)
-- CI step (in gh-aw generate/iterate) copies the hook + settings into the workdir **before** the agent runs, so `PreToolUse` fires even under `bypassPermissions`
+- CI step (in the gh-aw generate prep, and the hand-rolled iterate's mount step) copies the hook + settings into the workdir **before** the agent runs, so `PreToolUse` fires (gh-aw runs the agent under `acceptEdits`; the hand-rolled uses `bypassPermissions` — the hook denies in both)
 
 **Files** `adlc-standards/hooks/*`; gh-aw `*.md` (mount step)
 
