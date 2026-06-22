@@ -1,0 +1,6 @@
+# ADLC code owners.
+# Generated-app PRs must get a human code-owner review before merge — enforced
+# once branch protection's "Require review from Code Owners" is enabled (INFRA §F).
+# Scope is intentionally narrow (the generated code); pipeline/governance changes
+# rely on branch protection's general "require approval".
+workspaces/**   @saad-vts
