@@ -90,11 +90,11 @@
     - ✅ Require a pull request before merging
     - ✅ Require **≥1 approval**; ✅ Require review from **Code Owners**
     - ✅ Dismiss stale approvals on new commits
-    - ✅ Require **status checks to pass**, and select: `CI — Node/React` (adlc-ci), the CodeQL checks **`Analyze (actions)`** + **`Analyze (javascript-typescript)`** (verified default-setup names), and **`adlc/business-approval`**. *(Secret-scanning push protection is not a PR status check — see §G.)*
+    - ✅ Require **status checks to pass**, and select: `CI — Node/React` (the `adlc-ci` job name), the CodeQL checks **`Analyze (actions)`** + **`Analyze (javascript-typescript)`** (verified default-setup names), and **`adlc/business-approval`** (produced by `adlc-business-approval.yml`, WS6 — add it only after it has posted once; see §K / Task 6). *(Secret-scanning push protection is not a PR status check — see §G.)*
     - ✅ Require branches up to date before merging
     - ✅ Block force pushes; ✅ Restrict deletions
     - ✅ Do **not** allow bypassing (or restrict bypass to nobody) — including admins, to honor no-direct-merge
-16. 🖱️ Add `adlc-dev/.github/CODEOWNERS` mapping `workspaces/**` to your team/handle, and commit it.
+16. ✅ `adlc-dev/.github/CODEOWNERS` exists — `workspaces/** @saad-vts` (WS6). Confirm `@saad-vts` has write access so the "Require review from Code Owners" requirement resolves. (To use a team instead, edit the one line.)
 
 **Verify:** open a throwaway PR — GitHub shows it **blocked** on missing approval + `adlc/business-approval` even when CI is green; direct push to `main` is rejected.
 
