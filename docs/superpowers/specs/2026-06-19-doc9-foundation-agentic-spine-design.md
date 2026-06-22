@@ -69,6 +69,8 @@ safe-outputs:
 
 ### gh-aw `adlc-iterate.md` (PRIMARY; replaces hand-rolled trigger)
 
+> ⚠️ **SUPERSEDED (2026-06-22) — see the Addendum below.** Iterate was NOT ported: gh-aw strict mode bans the `contents: write` it needs. The section below is the original (pre-compile) design, kept for history; the live design is hand-rolled iterate (Plan 2 Task 4).
+
 ```
 on: (4 triggers, same as hand-rolled)
   - workflow_run: ADLC CI completed=failure on feature/issue-*
@@ -136,6 +138,7 @@ Research against the pinned gh-aw source corrected three design assumptions; **P
 - **G6 superseded:** `create-pull-request` is **commit-based**, not working-tree, and there is no literal `branch:` field. The deterministic branch name is set by the **pre-agent step** (`git checkout -b feature/issue-<N>-<slug>`); the agent commits on it; `preserve-branch-name: true` + `allowed-branches: [feature/*]` keep it exact. PR title via `title-prefix`.
 - **G5 refined:** gh-aw runs the `claude` CLI under `--permission-mode acceptEdits` (not `bypassPermissions`). The PreToolUse deny hook **does execute** in this engine (proven by gh-aw's own run log), but the **primary** deterministic enforcement is gh-aw-native: `--allowed-tools`, **Protected Files** (blocks `.github/`, `.claude/`, `CLAUDE.md`, `CODEOWNERS`, manifests — basename-matched), the AWF firewall, and the architecture (the agent has **no push credentials**; only the safe-outputs job writes, to feature/PR branches, never `main`). The deny hook is a **layered** control with an empirical verify-loads step.
 - **New constraint:** Protected Files is basename-matched, so the scaffold's `package.json`/`package-lock.json` must be `exclude`d on `create-pull-request`; cloned standards + mounted `.claude/` are kept out of the agent's commit via `.git/info/exclude`.
+- **Scope change (decided at compile time, 2026-06-22):** **iterate is NOT ported to gh-aw.** `gh aw compile` rejected it under strict mode — iterate needs `contents: write` for its deterministic cap-3 + `iterating`/`escalated` status pushes, and strict mode forces all writes through safe-outputs (which can't enforce a cap deterministically → would violate G8). Iterate stays the proven hand-rolled `adlc-iterate.yml` (always active, live status). **gh-aw = generate only.** This supersedes the "port both" scope above (§Scope) and **G7** (the gh-aw iterate `push_to_pull_request_branch` mechanism). See `docs/superpowers/plans/2026-06-19-ws2-3-4-ghaw-spine.md` Task 4.
 
 ## Self-review notes
 

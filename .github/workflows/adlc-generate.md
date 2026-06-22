@@ -42,7 +42,7 @@ tools:
 steps:
   - name: Checkout adlc-dev
     uses: actions/checkout@v6
-    with: { token: "${{ secrets.ADLC_AGENT_TOKEN }}", fetch-depth: 0 }
+    with: { token: "${{ secrets.ADLC_AGENT_TOKEN }}", fetch-depth: 0, persist-credentials: false }
   - name: Setup Node 20
     uses: actions/setup-node@v4
     with: { node-version: '20' }
