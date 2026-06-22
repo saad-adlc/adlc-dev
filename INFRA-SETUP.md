@@ -26,11 +26,12 @@
 > Live secret names in the current workflows are **`ADLC_AGENT_TOKEN`** and **`CLAUDE_API_KEY`** — keep these names.
 
 3. 🖱️ `adlc-dev` → Settings → Secrets and variables → Actions → **Secrets**. Confirm/create:
-   - `ADLC_AGENT_TOKEN` — fine-grained PAT (or GitHub App token) with, on `saad-adlc/adlc-dev`: **Contents: RW, Pull requests: RW, Issues: RW, Pages: RW, Workflows: RW**, and on `saad-adlc/adlc-standards`: **Contents: R** (it gets cloned each run).
+   - `ADLC_AGENT_TOKEN` — fine-grained PAT (or GitHub App token) with, on `saad-adlc/adlc-dev`: **Contents: RW, Pull requests: RW, Issues: RW, Pages: RW, Workflows: RW**, and on `saad-adlc/adlc-standards`: **Contents: R** (it gets cloned each run). **(2026-06-22) the gh-aw `adlc-generate` `create-pull-request` safe-output uses this PAT** as its `github-token`, so the PR opens under a real identity and triggers downstream CI/review/preview — the default `GITHUB_TOKEN` cannot (see §E).
    - `CLAUDE_API_KEY` — the Azure AI Foundry key, used by the **hand-rolled** workflows (resource method: `CLAUDE_CODE_USE_FOUNDRY` + `ANTHROPIC_FOUNDRY_API_KEY`).
    - `ANTHROPIC_API_KEY` — **for the gh-aw path**: same Foundry key value, under this name (gh-aw auto-injects it into the claude engine). Verified: with `ANTHROPIC_BASE_URL=https://orix-adastra-adlc.services.ai.azure.com/anthropic`, header `x-api-key` returns 200 for model `claude-sonnet-4-6`. gh-aw strict mode forbids the key in `engine.env`, so it must be this secret.
 4. 🖱️ `adlc-dev` → Settings → Secrets and variables → Actions → **Variables**. Create:
    - `ADLC_ENGINE` = `gh-aw`  *(real `if:`-guard switching the active engine: `gh-aw` = primary + auto-fallback; `legacy` = force the hand-rolled path. See §E / §L.)*
+     - ⚠️ **Spell it EXACTLY `ADLC_ENGINE`.** A misspelling (we hit `ALDC_ENGINE` on 2026-06-22) makes every workflow read `vars.ADLC_ENGINE` as unset → gh-aw runs "by accident" **and the `=legacy` rollback silently does nothing**. Verify: `gh variable list -R saad-adlc/adlc-dev` shows exactly one `ADLC_ENGINE`.
 5. 🖱️ `adlc-standards` → Settings → Secrets → add `ADLC_AGENT_TOKEN` (same PAT) so the **vendor-sync bot** can open PRs there.
 
 **Verify:** both secrets present in `adlc-dev`; `ADLC_ENGINE` variable visible; `adlc-standards` has the token.
@@ -72,8 +73,9 @@
 > **Model:** gh-aw is primary; the hand-rolled `*.yml` stay **fully wired as an always-ready fallback (never parked)**. gh-aw and hand-rolled are mutually exclusive via an `ADLC_ENGINE` repo-variable `if:`-guard, and a plain-Actions controller (`adlc-failover.yml`) auto-falls-back after 2 gh-aw strikes. Detail: PLAN WS2 + `docs/superpowers/plans/2026-06-19-ws2-3-4-ghaw-spine.md` (T6/T7).
 
 13. ✅ **Done:** `gh aw init` run; `adlc-review.md` + `.lock.yml` committed and **merged to `main`**. Additive governance gate — no engine guard needed. Needs the `ANTHROPIC_API_KEY` secret (§B).
-14. 🔜 **As the gh-aw generate port lands** (PLAN WS2/WS3), wire coexistence — do **NOT** park:
-    - gh-aw `adlc-generate.md`: add `if: vars.ADLC_ENGINE != 'legacy'`. (Iterate is **NOT** ported — strict mode bans its `contents: write`; `adlc-iterate.yml` stays hand-rolled, always active, no guard.)
+14. ✅ **Done + validated (2026-06-22, PR #35):** the gh-aw generate port landed with coexistence wired (do **NOT** park):
+    - gh-aw `adlc-generate.md`: `if: vars.ADLC_ENGINE != 'legacy'`. (Iterate is **NOT** ported — strict mode bans its `contents: write`; `adlc-iterate.yml` stays hand-rolled, always active, no guard.)
+    - gh-aw `adlc-generate.md` `safe-outputs.create-pull-request`: **`github-token: ${{ secrets.ADLC_AGENT_TOKEN }}`** — REQUIRED. With the default `GITHUB_TOKEN` the org bars PR creation *and* the opened PR triggers no downstream `pull_request` workflows; the PAT fixes both (it owns the branch push **and** the PR API call). Found via the smoke; see `docs/superpowers/2026-06-22-ghaw-generate-smoke-outcome.md`.
     - hand-rolled `adlc-generate.yml`: gate the `generate` job to `github.event.label.name == 'adlc-fallback' || (github.event.label.name == 'adlc-generate' && vars.ADLC_ENGINE == 'legacy')`. hand-rolled `adlc-iterate.yml`: wrap its compound job `if:` with `vars.ADLC_ENGINE == 'legacy' && ( … )`. `on:` + logic untouched.
     - add `adlc-failover.yml` (the 2-strike controller; routes to hand-rolled via the `adlc-fallback` label, which it creates if missing).
     - `adlc-ci.yml`, `adlc-preview.yml`, `adlc-security-iterate.yml`, `adlc-signals.yml` → keep as real Actions (not agentic; not engine-switched).
@@ -85,6 +87,8 @@
 ## F. Branch protection & required checks (the no-direct-merge gate)
 
 > Do this **after** the gate-producing workflows exist and have run once (so their check names appear in the dropdown).
+>
+> **Status (2026-06-22): still OFF** — `gh api repos/saad-adlc/adlc-dev/branches/main/protection` returns 404. This is the **last remaining no-direct-merge gate**. The gate checks now exist and have run live (smoke PR #40: `CI — Node/React`, `Analyze (actions)`, `Analyze (javascript-typescript)`, `adlc/business-approval`), so their names are selectable. Until this is on, `main` accepts direct pushes.
 
 15. 🖱️ `adlc-dev` → Settings → Branches → Add branch ruleset (or classic protection) for `main`:
     - ✅ Require a pull request before merging
@@ -136,13 +140,15 @@
 ## J. Vendor-sync bot
 
 23. 💻 Add `adlc-standards/.github/workflows/vendor-sync.yml` (scheduled weekly + `workflow_dispatch`) that, per `VENDOR.md` row, checks the upstream for a newer release and opens a PR with the diff. Uses `ADLC_AGENT_TOKEN`.
-24. 🖱️ `adlc-standards` → Settings → Actions → General → ensure **"Allow GitHub Actions to create and approve pull requests"** is enabled (needed for the bot to open PRs).
+24. 🖱️ `adlc-standards` → Settings → Actions → General → ensure **"Allow GitHub Actions to create and approve pull requests"** is enabled (needed for the bot to open PRs). *(Not required if the bot opens PRs via `ADLC_AGENT_TOKEN` (a PAT, per step 23) instead of the default `GITHUB_TOKEN` — same lesson as adlc-dev's generate path, smoke 2026-06-22. A PAT-opened PR also triggers the bot's reviewers; a `GITHUB_TOKEN` one would not.)*
 
 **Verify:** temporarily set one pin in `VENDOR.md` to an older tag, dispatch the bot → it opens a `vendor-sync:` PR with the correct diff.
 
 ---
 
 ## K. Smoke test (full loop)
+
+> **Status (2026-06-22): the CI-side loop PASSED end-to-end.** Driven by labelling an issue directly (the claude.ai front-end is WS7, not built yet): issue #39 → gh-aw generate (Foundry) → deny hook enforcing → Spec-Kit artifacts + TDD code → **PR #40 opened under the PAT** → `adlc-ci` green (coverage 90.8%) → **live Pages preview (HTTP 200)** → advisory governance review. Three fixes were required first — engine-var spelling (§B), create-PR `github-token` PAT (§E), deny-hook absolute-path (adlc-standards PR #4) — all landed. Full record: `docs/superpowers/2026-06-22-ghaw-generate-smoke-outcome.md`. **Remaining for the *full* loop:** WS7 intent capture (steps 25/27 below), and business-approval → human merge gated by branch protection (§F).
 
 25. ☁️ From a fresh claude.ai chat, run the ADLC skill end-to-end on a trivial feature (e.g. "hello world greeting").
 26. 🖱️ Watch: issue created → gh-aw generate runs (claude-code-action, Foundry) → deny hooks active in logs → Spec-Kit artifacts committed → PR opened (not merged) → ci/CodeQL/secret-scan green → governance review comment + audit entry → PR blocked on approval + `adlc/business-approval`.

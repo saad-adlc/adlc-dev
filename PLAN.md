@@ -60,6 +60,19 @@
 
 ---
 
+## 1c. Status (2026-06-22) — gh-aw generate spine **validated live**
+
+The gh-aw generate path passed an end-to-end smoke (issue #39 → **PR #40** → live GitHub Pages preview): engine routing (gh-aw runs, hand-rolled skips), the deny hook enforcing under Foundry, Fallback-B scaffold + `spec/plan/tasks` + TDD code in the PR, `adlc-ci` green (coverage 90.8%), preview live (HTTP 200), and the advisory governance review — all confirmed. Record: `docs/superpowers/2026-06-22-ghaw-generate-smoke-outcome.md`.
+
+**Three fixes the smoke forced (landed on `main`):**
+- `ADLC_ENGINE` repo variable was misspelled `ALDC_ENGINE` → workflows read it as unset (gh-aw ran by accident; the `=legacy` rollback was silently dead) → recreated correctly = `gh-aw`.
+- gh-aw `create-pull-request` used the default `GITHUB_TOKEN` (barred from opening PRs here + triggers **no** downstream `pull_request` CI) → wired `github-token: ${{ secrets.ADLC_AGENT_TOKEN }}` — adlc-dev **PR #35**.
+- deny hook denied Claude's **absolute** `Write`/`Edit` paths (the tools always pass absolute paths; the hook compared the relative `$ADLC_WORKSPACE`) → `path_outside_workspace` now strips the `$GITHUB_WORKSPACE` prefix + rejects `..` traversal — adlc-standards **PR #4**; hook suite 40→47.
+
+**Still open:** the WS6 **audit marker** (deferred — see WS6 + §7); **T8.5** fail-over / **T8.6** engine-switch / **T8.7** iterate not yet exercised live; **branch protection (§F / WS6)** still OFF (verified 404) — the last no-direct-merge gate.
+
+---
+
 ## 2. Decision log (from the grill)
 
 | # | Decision | Choice |
@@ -162,7 +175,7 @@ Each workstream lists: **deliverables**, **files touched**, **acceptance criteri
   - ~~`adlc-iterate.md`~~ → **NOT ported**; iterate stays hand-rolled (`adlc-iterate.yml`), because gh-aw strict mode bans the `contents: write` its deterministic cap-3/status pushes need. It handles CI failure / review / `/adlc-iterate:` for PRs from either generator.
   - `adlc-review.md` (PR opened/updated → review-agent-governance, WS6)
   - Keep `ci` and `preview` as plain Actions (no agent) — gh-aw is for the *agentic* jobs
-- gh-aw frontmatter sets `permissions: read-all` default + explicit `safe-outputs` (create-pull-request, add-comment) — this is doc-9's "read-only default + gated safe outputs"
+- gh-aw frontmatter sets `permissions: read-all` default + explicit `safe-outputs` (create-pull-request, add-comment) — this is doc-9's "read-only default + gated safe outputs". **The `create-pull-request` safe-output must set `github-token: ${{ secrets.ADLC_AGENT_TOKEN }}`** (smoke 2026-06-22): the default `GITHUB_TOKEN` is barred from opening PRs here *and* a `GITHUB_TOKEN`-opened PR triggers no downstream `pull_request` workflows (ci/review/preview). The PAT owns both the branch push and the PR API call.
 - **Keep the hand-rolled workflows fully wired (NOT parked).** Make gh-aw and hand-rolled mutually exclusive via an `ADLC_ENGINE` repo-variable `if:`-guard: gh-aw runs when `ADLC_ENGINE != 'legacy'`; the hand-rolled run only when `ADLC_ENGINE == 'legacy'` (direct on label) or when the controller routes to them via the `adlc-fallback` label. No double-run; logic untouched.
 - **`ADLC_ENGINE` is a real guard, not documentation**: `gh-aw` (default) = gh-aw primary + auto-fallback; `legacy` = force the proven hand-rolled path instantly (one variable flip, no workflow edits).
 - **Fail-over controller** (`adlc-dev/.github/workflows/adlc-failover.yml`, plain Actions / engine-agnostic): on a gh-aw generate `workflow_run` failure, retry gh-aw once; on the **2nd strike or agent-BLOCKED**, add the `adlc-fallback` label to route to the hand-rolled generator (a real issue event → its internals are untouched). Strikes/errors propagate via a run-context artifact + structured issue comments. Detail: `docs/superpowers/plans/2026-06-19-ws2-3-4-ghaw-spine.md` (T6/T7).
@@ -214,6 +227,8 @@ Each workstream lists: **deliverables**, **files touched**, **acceptance criteri
 
 **AC** — A deliberate test prompt that tries to write outside the workspace / push to main / write a fake secret is **blocked by the hook** (visible deny in the run log), with the rest of the run unaffected.
 
+> **Hook fix (2026-06-22, smoke):** Claude's `Write`/`Edit` tools always pass **absolute** paths; the workspace-confinement check originally compared against the *relative* `$ADLC_WORKSPACE`, so it denied every legit in-workspace write → the agent fell back to Bash heredocs (where Claude's built-in obfuscation analysis blocked TSX/test content) → flaky/failed builds. `path_outside_workspace` now normalizes the `$GITHUB_WORKSPACE` prefix before the check and rejects `..` traversal (a real escape that was previously allowed). Hook suite 40→**47** tests. adlc-standards **PR #4**.
+
 ---
 
 ### WS5 — Sanitization gates
@@ -239,14 +254,14 @@ Each workstream lists: **deliverables**, **files touched**, **acceptance criteri
 - **`review-agent-governance`** skill (WS0) + `adlc-review.md` gh-aw workflow:
   - Triggers on ADLC PR opened/synchronize
   - Reviews the diff vs `constitution.md` + `compliance-rules.md`, posts a structured governance review comment
-  - Writes a **signed audit-log entry** (git-tracked, e.g. `workspaces/<slug>/.adlc/audit.log` or a JSONL) attributing the agent action
+  - Emits the audit record as a machine-readable **`<!-- adlc-audit … -->` marker in the review comment** — **not** a committed `audit.log` (strict mode forbids the agent committing files). ⚠️ **Deferred (2026-06-22 smoke):** the agent does *not* reliably emit the marker (it relied on model judgment — counter to "deterministic over model judgment"). gh-aw already appends an immutable provenance footer (workflow id, run URL, model) and the `adlc-iterate` label deterministically signals blocking-vs-advisory; the fix (accept gh-aw footers vs. a deterministic audit step) is an open follow-up — see `docs/superpowers/2026-06-22-ghaw-generate-smoke-outcome.md`.
   - May request changes (→ feeds `adlc-iterate`); **never approves**
 - **Business-approval required check**: small workflow exposing commit status `adlc/business-approval` — *pending* until the `adlc-approved` label lands (set by `adlc-signals.yml`), *success* once present
 - **CODEOWNERS** for `workspaces/**` so a human review is required
 
 **Files** `adlc-standards/skills/review-agent-governance/`, `adlc-dev/.github/workflows/adlc-review.md`, a `business-approval` status workflow, `adlc-dev/.github/CODEOWNERS`
 
-**AC** — A PR cannot merge until: all required checks pass (ci, CodeQL, secret-scan), ≥1 code-owner approves, AND `adlc/business-approval` is green; the governance review comment + audit entry appear automatically; the review agent never shows as an approver.
+**AC** — A PR cannot merge until: all required checks pass (ci, CodeQL, secret-scan), ≥1 code-owner approves, AND `adlc/business-approval` is green; the governance review comment appears automatically (carrying gh-aw's provenance footer; the custom audit marker is a deferred follow-up); the review agent never shows as an approver. *(Review behavior + business-approval status validated 2026-06-22; branch protection itself still pending — §F.)*
 
 **Infra dep** → INFRA steps: branch protection rule on `main` listing the exact required checks; add `adlc/business-approval` to required checks.
 
@@ -304,4 +319,7 @@ A new feature, driven entirely from a fresh claude.ai chat, results in:
 - **`adlc-security-iterate` guard bug (from evidence):** fix the `check_run.name == 'Analyze'` mismatch (WS5) — currently dead. This is the one "thought-it-worked" item the evidence exposed.
 - **Secret name drift:** `ADLC-HANDOFF.md` lists `ANTHROPIC_API_KEY`/`ADLC_PAT`/`GH_TOKEN`; the live workflows use `ADLC_AGENT_TOKEN` + `CLAUDE_API_KEY`. `INFRA-SETUP.md` uses the live names.
 - **MCP connector state unverified:** treat connector install (INFRA-C) as a real pending step until a live read+write test from claude.ai passes.
+- **Audit marker (WS6) — deferred (2026-06-22):** the governance reviewer omits the `<!-- adlc-audit … -->` JSON because it depended on the agent emitting it. Decide: accept gh-aw's immutable footers as the audit trail, or add a deterministic audit step keyed off the `adlc-iterate` label + run metadata. (Leaning: gh-aw footers + the label already give deterministic provenance.)
+- **Live activation remaining:** **T8.5** 2-strike fail-over, **T8.6** engine switch (`ADLC_ENGINE=legacy`), **T8.7** iterate loop — not yet exercised live; **branch protection (§F)** still OFF (verified 404).
+- **Smoke validated (2026-06-22):** gh-aw generate happy-path proven end-to-end (issue #39 → PR #40 → live preview); 3 fixes landed (engine var, create-PR PAT, hook abspath). See §1c + `docs/superpowers/2026-06-22-ghaw-generate-smoke-outcome.md`.
 ```
