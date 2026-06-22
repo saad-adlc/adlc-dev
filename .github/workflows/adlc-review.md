@@ -55,6 +55,8 @@ Only review PRs whose head branch starts with `feature/issue-`. If it does not, 
 - Post **one** governance review comment with a structured verdict:
   - `Decision: changes-requested | observations-only`
   - Findings grouped by severity (blocking / advisory), each with `file:line` and the rule it relates to.
+  - **End the comment with a machine-readable audit marker on its own line** — this IS the signed audit record (immutable in GitHub's event log, attributed to this workflow identity; strict mode forbids committing an `audit.log` file):
+    `<!-- adlc-audit {"ts":"<ISO8601>","pr":<N>,"actor":"review-agent-governance","decision":"changes-requested|observations-only","findings":<count>,"sha":"<head-sha>"} -->`
 - If there are **blocking** findings, also add the `adlc-iterate` label (this feeds the iterate loop).
 
 ## Hard rules
