@@ -62,6 +62,13 @@ steps:
 
 safe-outputs:
   create-pull-request:
+    # Open the PR as our PAT identity, NOT the default GITHUB_TOKEN. Two reasons:
+    # (1) the org/repo setting "Allow GitHub Actions to create and approve pull
+    #     requests" is off, so GITHUB_TOKEN is barred from opening PRs; (2) a PR
+    #     opened by GITHUB_TOKEN would NOT trigger adlc-ci / adlc-review /
+    #     adlc-preview (GitHub suppresses token-on-token workflow events). The PAT
+    #     fixes both: the PR opens AND the downstream pipeline fires.
+    github-token: ${{ secrets.ADLC_AGENT_TOKEN }}
     title-prefix: "feat: "
     labels: [adlc-generated]
     base-branch: main
