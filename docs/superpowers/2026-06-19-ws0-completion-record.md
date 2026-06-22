@@ -64,6 +64,8 @@ bash hooks/test/check-docs.sh  → docs OK
 ```
 10 commits ahead of `origin/main`; working tree clean; pushed + PR opened.
 
+> **Update (2026-06-22, post-merge):** the live T8 smoke (`docs/superpowers/2026-06-22-ghaw-generate-smoke-outcome.md`) found the deny hook denied Claude's **absolute** `Write`/`Edit` paths (the tools always pass absolute paths; the hook compared against the relative `$ADLC_WORKSPACE`), making the agent build flaky. Fixed in `adlc-standards` **PR #4**: `path_outside_workspace` now normalizes the `$GITHUB_WORKSPACE` prefix and rejects `..` traversal. Hook suite **40 → 47** assertions.
+
 ## Known limitations / follow-ups
 
 - **M2 (secret false-positives):** the generic `token|password|secret|api_key = <12+ chars>` rule can fire on ordinary identifiers (`const token = useAuthContext()`). Tuning (require a quoted/high-entropy value) deferred to avoid hastily loosening detection. The agent gets a clear deny reason and can rename in the meantime.
