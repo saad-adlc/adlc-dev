@@ -1,5 +1,5 @@
-{ "stage": "iterating",
-  "iteration": 1,
-  "pr": 44, "preview_url": null,
-  "detail": "Added a live summary table below the continent cards showing each continent's real-time population, share of world, and annual growth rate, with Europe highlighted in red and Africa in blue to match the cards.",
-  "updated": "2026-06-23T15:47:57Z" }
+{ "stage": "clean", "iteration": 1,
+  "pr": 44,
+  "preview_url": null,
+  "detail": "All checks passed — deploying preview",
+  "updated": "2026-06-23T15:54:57Z" }
