@@ -1,8 +1,4 @@
-{
-  "stage": "deploying",
-  "iteration": 0,
-  "pr": 46,
-  "preview_url": null,
-  "detail": "Publishing the live preview",
-  "updated": "2026-06-23T15:27:56Z"
-}
+{ "stage": "preview-deployed", "iteration": 0, "pr": 46,
+  "preview_url": "https://saad-adlc.github.io/adlc-dev/previews/pr-46-issue-45-tip-bill-splitter/",
+  "detail": "Live preview deployed",
+  "updated": "2026-06-23T15:28:09Z" }
