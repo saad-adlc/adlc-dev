@@ -1,2 +1,3 @@
-{ "stage": "scaffolding", "iteration": 0, "pr": null, "preview_url": null,
-  "detail": "Workspace created, dependencies installed", "updated": "2026-06-23T15:17:25Z" }
+{ "stage": "pr-open", "iteration": 0, "pr": 46,
+  "preview_url": null, "detail": "Built and packaged — automated checks running",
+  "updated": "2026-06-23T15:27:10Z" }
