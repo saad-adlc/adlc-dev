@@ -20,12 +20,13 @@ describe('Dashboard', () => {
 
   it('renders all six continent names', () => {
     render(<Dashboard />);
-    expect(screen.getByText('Asia')).toBeInTheDocument();
-    expect(screen.getByText('Africa')).toBeInTheDocument();
-    expect(screen.getByText('Europe')).toBeInTheDocument();
-    expect(screen.getByText('North America')).toBeInTheDocument();
-    expect(screen.getByText('South America')).toBeInTheDocument();
-    expect(screen.getByText('Oceania')).toBeInTheDocument();
+    // Each name appears in both a card and the summary table
+    expect(screen.getAllByText('Asia').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Africa').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Europe').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('North America').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('South America').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Oceania').length).toBeGreaterThan(0);
   });
 
   it('renders the growth subtitle', () => {
@@ -41,26 +42,33 @@ describe('Dashboard', () => {
 
   it('renders growth rate badges', () => {
     render(<Dashboard />);
-    expect(screen.getByText('+0.58%')).toBeInTheDocument();
-    expect(screen.getByText('-0.12%')).toBeInTheDocument();
-    expect(screen.getByText('+2.27%')).toBeInTheDocument();
+    // Each rate appears in both a card badge and the summary table
+    expect(screen.getAllByText('+0.58%').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('-0.12%').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('+2.27%').length).toBeGreaterThan(0);
   });
 
   it('Europe growth-rate badge has danger class', () => {
     render(<Dashboard />);
-    const badge = screen.getByText('-0.12%');
+    const matches = screen.getAllByText('-0.12%');
+    const badge = matches.find(el => el.classList.contains('badge'));
+    expect(badge).toBeDefined();
     expect(badge).toHaveClass('badge-danger');
   });
 
   it('Africa growth-rate badge has info class', () => {
     render(<Dashboard />);
-    const badge = screen.getByText('+2.27%');
+    const matches = screen.getAllByText('+2.27%');
+    const badge = matches.find(el => el.classList.contains('badge'));
+    expect(badge).toBeDefined();
     expect(badge).toHaveClass('badge-info');
   });
 
   it('other continent growth-rate badges have neutral class', () => {
     render(<Dashboard />);
-    const asiaBadge = screen.getByText('+0.58%');
+    const matches = screen.getAllByText('+0.58%');
+    const asiaBadge = matches.find(el => el.classList.contains('badge'));
+    expect(asiaBadge).toBeDefined();
     expect(asiaBadge).toHaveClass('badge-neutral');
   });
 
@@ -110,5 +118,49 @@ describe('Dashboard', () => {
     const worldTotal = parseInt((worldEl.textContent ?? '').replace(/\D/g, ''), 10);
 
     expect(worldTotal).toBe(continentSum);
+  });
+
+  it('renders summary table with all six continent rows', () => {
+    render(<Dashboard />);
+    const table = screen.getByRole('table');
+    expect(table).toBeInTheDocument();
+    const continentNames = ['Asia', 'Africa', 'Europe', 'North America', 'South America', 'Oceania'];
+    continentNames.forEach(name => {
+      expect(screen.getAllByText(name).length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it('summary table shows live population counter for each continent', () => {
+    render(<Dashboard />);
+    const continentNames = ['Asia', 'Africa', 'Europe', 'North America', 'South America', 'Oceania'];
+    continentNames.forEach(name => {
+      expect(screen.getByTestId(`table-counter-${name}`)).toBeInTheDocument();
+    });
+  });
+
+  it('summary table Europe rate cell has danger colour class', () => {
+    render(<Dashboard />);
+    const matches = screen.getAllByText('-0.12%');
+    const tableCell = matches.find(el => el.classList.contains('rate-danger'));
+    expect(tableCell).toBeDefined();
+  });
+
+  it('summary table Africa rate cell has info colour class', () => {
+    render(<Dashboard />);
+    const matches = screen.getAllByText('+2.27%');
+    const tableCell = matches.find(el => el.classList.contains('rate-info'));
+    expect(tableCell).toBeDefined();
+  });
+
+  it('summary table counter updates after one second', () => {
+    render(<Dashboard />);
+    const asiaCell = screen.getByTestId('table-counter-Asia');
+    const before = asiaCell.textContent;
+
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+
+    expect(asiaCell.textContent).not.toBe(before);
   });
 });

@@ -1,4 +1,5 @@
-{ "stage": "preview-deployed", "iteration": 0, "pr": 44,
-  "preview_url": "https://saad-adlc.github.io/adlc-dev/previews/pr-44-issue-43-live-world-population-dashboard/",
-  "detail": "Live preview deployed",
-  "updated": "2026-06-22T21:16:04Z" }
+{ "stage": "iterating",
+  "iteration": 1,
+  "pr": 44, "preview_url": null,
+  "detail": "Added a live summary table below the continent cards showing each continent's real-time population, share of world, and annual growth rate, with Europe highlighted in red and Africa in blue to match the cards.",
+  "updated": "2026-06-23T15:47:57Z" }

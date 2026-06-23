@@ -6,6 +6,7 @@ import {
 } from '../utils/population';
 import WorldTotal from './WorldTotal';
 import ContinentCard from './ContinentCard';
+import SummaryTable from './SummaryTable';
 
 export default function Dashboard() {
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -32,6 +33,7 @@ export default function Dashboard() {
           />
         ))}
       </div>
+      <SummaryTable continents={continents} />
       <footer className="source-footnote">
         Data: UN World Population Prospects 2024 / Worldometer. Figures are statistical estimates.
       </footer>

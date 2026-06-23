@@ -93,6 +93,10 @@ A footer line names the data source and notes that all figures are statistical e
 - **SC-004**: Vitest line coverage ≥ 80%.
 - **SC-005**: `npm run ci` (typecheck + lint + test:coverage) passes green.
 
+## Change log
+
+- [2026-06-23] iteration-1: Added a live summary table beneath the six continent cards. The table lists each continent with its real-time population (ticking every second), its static share of world population, and its annual growth rate. Europe's growth rate is styled in red and Africa's in blue, consistent with the card badges. Triggered by business-user feedback requesting a tabular view of the continent data.
+
 ## Assumptions
 
 - Geographic six-continent model; Antarctica excluded (no permanent population).

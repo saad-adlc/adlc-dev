@@ -111,6 +111,68 @@ body {
   color: #f87171;
 }
 
+/* Summary table */
+.summary-table-section {
+  width: 100%;
+}
+
+.summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  background: #1e2230;
+  border: 1px solid #2d3348;
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.summary-table th {
+  text-align: left;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  padding: 0.6rem 0.8rem;
+  background: #161923;
+  border-bottom: 1px solid #2d3348;
+}
+
+.summary-table td {
+  padding: 0.55rem 0.8rem;
+  border-bottom: 1px solid #2d3348;
+  color: #e2e8f0;
+}
+
+.summary-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.summary-table .row-alt {
+  background: #181c28;
+}
+
+.summary-table .col-numeric {
+  text-align: right;
+}
+
+.summary-table .tabular {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.summary-table .rate-cell {
+  text-align: right;
+  font-weight: 500;
+}
+
+.summary-table .rate-danger {
+  color: #f87171;
+}
+
+.summary-table .rate-info {
+  color: #60a5fa;
+}
+
 /* Footer */
 .source-footnote {
   font-size: 0.69rem;
