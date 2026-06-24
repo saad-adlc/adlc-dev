@@ -9,6 +9,11 @@ on:
 # engine (ADLC_ENGINE=legacy). Default/unset/'gh-aw' -> this runs; hand-rolled skips.
 if: "${{ vars.ADLC_ENGINE != 'legacy' }}"
 
+# WS9 — per-run budget cap: a hard ceiling on agent turns per run. Top-level field
+# (engine.max-turns is deprecated in gh-aw). The daily AI-credit ceiling
+# (GH_AW_MAX_DAILY_AI_CREDITS, default 5000) still applies on top of this.
+max-turns: 50
+
 permissions:
   contents: read      # Fallback B: no early push from the agent job; the safe-output job owns the PR write
   issues: read
