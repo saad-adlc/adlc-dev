@@ -89,17 +89,19 @@ jobs:
           awk "BEGIN{ exit ($PCT < 80) }" || \
             (echo "❌ Coverage ${PCT}% below 80%" && exit 1)
 
-      - name: Banned package check
+      - name: Approved-packages check (WS8 allow-list, default-deny)
         working-directory: workspaces/${{ needs.detect-workspace.outputs.workspace }}
+        env:
+          STANDARDS_REPO: saad-adlc/adlc-standards
+          STANDARDS_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
         run: |
-          BANNED=('"moment":' '"lodash":')
-          for pkg in "${BANNED[@]}"; do
-            if grep "$pkg" package.json 2>/dev/null; then
-              echo "❌ Banned package: $pkg"
-              exit 1
-            fi
-          done
-          echo "✅ No banned packages"
+          # The independent, deterministic allow-list gate. Clones the standards (source of
+          # truth) and validates this workspace's package.json against approved-packages.json:
+          # any UNLISTED or BANNED direct dependency fails the PR (replaces the old banned-only
+          # grep with full default-deny). Transitive deps are Dependabot's job (WS5).
+          git clone --depth 1 "https://x-access-token:${STANDARDS_TOKEN}@github.com/${STANDARDS_REPO}.git" /tmp/adlc-standards
+          bash /tmp/adlc-standards/hooks/check-approved-packages.sh \
+            package.json /tmp/adlc-standards/steering/approved-packages.json
   adlc-status-clean:
     name: Status -> clean
     needs: [ci-node]
