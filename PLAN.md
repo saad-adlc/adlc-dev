@@ -283,6 +283,41 @@ Each workstream lists: **deliverables**, **files touched**, **acceptance criteri
 
 ---
 
+### WS8 — Orix `ai-dev/` standards integration  *(PENDING; scoped 2026-06-24)*
+
+**Goal** Generated code follows the **Orix `ai-dev/` standards** (React style + global behavior + validation), not just the light `steering/` rules. Today the **primary gh-aw path reads only `steering/`**; only the hand-rolled fallback reads `ai-dev/` (`CLAUDE.md` + `ai-dev/rules/react/style.md`) — so the two engines drift on standards.
+
+**Decisions (grill 2026-06-24)**
+- **Package policy = enable controlled installs.** Move off the strict "no new deps": the generate flow may install the Orix-**approved** packages (`react-router-dom`, `axios`, `zustand`, `@tanstack/react-query`; `@playwright/test` for e2e) when the spec needs them. Banned list still hard-enforced (`moment`, full `lodash`, CVE, GPL).
+- **Wiring = mount `ai-dev/` into gh-aw.** `adlc-prep.sh` cp's `ai-dev/` (rules/react + rules/global + validation) into the workdir; `adlc-generate.md` reads `ai-dev/rules/react/style.md` + `rules/global/*` — mirroring the hand-rolled path, so both engines read the same Orix rules.
+- **Reviewer** `adlc-review` extends `compliance-rules` to check Orix style/structure (kebab-case filenames, JSDoc on public fns, ≤300 lines/file + ≤40 lines/fn, functional-only, no inline styles, API loading/error/success).
+- **Output drift accepted** — generated style shifts to Orix conventions (kebab-case files, CSS Modules over inline styles).
+
+**Open sub-questions / risks (resolve before/while building)**
+- **Placeholder:** `ai-dev/rules/react/style.md` is "ADLC industry defaults *pending Orix's React standards doc*" — swap in Orix's real doc when it lands (mount/read wiring stays).
+- **Controlled-install mechanism — needs a security pass.** How installs are gated: an **allow-list** (the approved table) enforced by the **deny hook** + an agent/prep `npm install <approved>` step, replacing the fixed-lockfile `npm ci`. The deny hook, banned-list, and CI gate must all still hold; the create-PR bundle must include the updated `package.json` + lockfile. Widening the agent's surface (network installs) is the main risk.
+- **Source reconciliation:** `steering/approved-stack.md` (React-only) now conflicts with `ai-dev/` (+router/axios/state/query) — decide the canonical source (likely `steering/` defers to `ai-dev/`), so the agent isn't given two contradictory stack lists.
+
+**Files** `adlc-dev/.github/scripts/adlc-prep.sh`, `adlc-dev/.github/workflows/adlc-generate.md` (+ recompile lock), `adlc-standards/steering/*` (reconcile vs `ai-dev/`), `adlc-standards/ai-dev/rules/react/style.md` (Orix swap), `adlc-dev/.github/workflows/adlc-review.md`.
+
+**AC** A generate run reads the Orix rules, installs an approved package when the spec needs it (e.g. `react-router-dom`), emits kebab-case files + JSDoc, CI green; the reviewer flags Orix-style violations; banned packages still blocked.
+
+---
+
+### WS9 — Per-run budget cap  *(PENDING; scoped 2026-06-24)*
+
+**Goal** A hard **per-run** ceiling on agent work. Today only a **daily 5000-AIC** guardrail exists (gh-aw default — `GH_AW_DEFAULT_MAX_DAILY_AI_CREDITS` is unset); there is **no per-run limit**.
+
+**Decision (grill 2026-06-24)** Add **`engine.max-turns ≈ 50`** to `adlc-generate.md` (the supported per-run knob; ~50 is generous — a typical generate ≈ **161 AIC** and finishes well under), and **keep the daily 5000-AIC** cost ceiling. Numbers tunable after observing real runs.
+
+**Files** `adlc-dev/.github/workflows/adlc-generate.md` (`engine.max-turns`) + recompile lock; consider matching `--max-turns` on the hand-rolled path.
+
+**AC** A run that loops past ~50 turns is stopped (visible in the run log); normal runs unaffected; the daily cap is unchanged.
+
+**Open** Verify gh-aw exposes `engine.max-turns` (claude-code-action passthrough); if a **per-run AIC** cap is also supported, consider adding it alongside.
+
+---
+
 ## 5. Sequencing & dependencies
 
 ```
@@ -322,4 +357,5 @@ A new feature, driven entirely from a fresh claude.ai chat, results in:
 - **Audit marker (WS6) — deferred (2026-06-22):** the governance reviewer omits the `<!-- adlc-audit … -->` JSON because it depended on the agent emitting it. Decide: accept gh-aw's immutable footers as the audit trail, or add a deterministic audit step keyed off the `adlc-iterate` label + run metadata. (Leaning: gh-aw footers + the label already give deterministic provenance.)
 - **Live activation remaining:** **T8.5** 2-strike fail-over, **T8.6** engine switch (`ADLC_ENGINE=legacy`), **T8.7** iterate loop — not yet exercised live; **branch protection (§F)** still OFF (verified 404).
 - **Smoke validated (2026-06-22):** gh-aw generate happy-path proven end-to-end (issue #39 → PR #40 → live preview); 3 fixes landed (engine var, create-PR PAT, hook abspath). See §1c + `docs/superpowers/2026-06-22-ghaw-generate-smoke-outcome.md`.
+- **WS8 + WS9 (scoped 2026-06-24, PENDING):** integrate the **Orix `ai-dev/` standards** into the primary gh-aw path (controlled package installs + mount `ai-dev/` + reviewer checks) and add a **per-run `max-turns ≈ 50`** cap. See §4 WS8/WS9 + `docs/superpowers/2026-06-24-drift-and-decisions-log.md`.
 ```
