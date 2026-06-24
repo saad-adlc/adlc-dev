@@ -55,9 +55,13 @@ Only review PRs whose head branch starts with `feature/issue-`. If it does not, 
 - Post **one** governance review comment with a structured verdict:
   - `Decision: changes-requested | observations-only`
   - Findings grouped by severity (blocking / advisory), each with `file:line` and the rule it relates to.
-  - **End the comment with a machine-readable audit marker on its own line** — this IS the signed audit record (immutable in GitHub's event log, attributed to this workflow identity; strict mode forbids committing an `audit.log` file):
-    `<!-- adlc-audit {"ts":"<ISO8601>","pr":<N>,"actor":"review-agent-governance","decision":"changes-requested|observations-only","findings":<count>,"sha":"<head-sha>"} -->`
-- If there are **blocking** findings, also add the `adlc-iterate` label (this feeds the iterate loop).
+- If there are **blocking** findings, also add the `adlc-iterate` label. This both feeds the
+  iterate loop **and** is the deterministic signal the audit record is derived from.
+
+> **Do NOT emit an `<!-- adlc-audit … -->` marker yourself.** The machine-readable audit
+> record is written deterministically by the `adlc-audit.yml` workflow after you finish,
+> from the `adlc-iterate` label + run metadata — never from model output (which proved
+> unreliable in the smoke). Your job is the review verdict + the label, nothing more.
 
 ## Hard rules
 

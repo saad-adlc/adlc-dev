@@ -1,0 +1,81 @@
+name: ADLC — Governance Audit
+# WS6 deterministic audit record.
+#
+# The governance REVIEW (adlc-review, gh-aw) is agentic + advisory. The audit TRAIL,
+# however, must not depend on the model: the live smoke showed the agent improvises the
+# marker format run-to-run (nothing on one PR, a different plain-text line on another).
+# This plain-Actions workflow fires after the review concludes and writes the canonical
+# `<!-- adlc-audit {...} -->` marker, deriving the decision deterministically from the
+# `adlc-iterate` label (applied <=> the review found blocking issues) + run metadata.
+# It trusts no agent output.
+
+on:
+  workflow_run:
+    workflows: ["ADLC Governance Review"]
+    types: [completed]
+
+permissions:
+  contents: read
+  issues: write          # list labels + post the marker comment (PR comments use the issues API)
+  pull-requests: write
+
+jobs:
+  audit:
+    name: Write governance audit marker
+    # Only audit real PR-triggered reviews that actually completed.
+    if: ${{ github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Derive decision from label + run metadata, post the audit marker
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            const pr = (run.pull_requests || [])[0];
+            if (!pr) { core.info('No associated PR on the review run; nothing to audit.'); return; }
+            if (!pr.head || !pr.head.ref || !pr.head.ref.startsWith('feature/issue-')) {
+              core.info(`PR head '${pr.head && pr.head.ref}' is not an ADLC feature branch; skipping.`);
+              return;
+            }
+            const owner = context.repo.owner, repo = context.repo.repo;
+            const issue_number = pr.number;
+            const sha = run.head_sha;
+
+            // Deterministic decision: changes-requested IFF the review applied `adlc-iterate`.
+            const labels = await github.paginate(github.rest.issues.listLabelsOnIssue, {
+              owner, repo, issue_number, per_page: 100,
+            });
+            const blocking = labels.some(l => l.name === 'adlc-iterate');
+            const decision = blocking ? 'changes-requested' : 'observations-only';
+
+            const record = {
+              ts: new Date().toISOString(),
+              pr: issue_number,
+              actor: 'review-agent-governance',
+              decision,
+              blocking,
+              sha,
+              review_run: run.html_url,
+            };
+            const marker = `<!-- adlc-audit ${JSON.stringify(record)} -->`;
+
+            // Idempotency: if a prior audit marker for this exact head SHA exists, don't duplicate.
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number, per_page: 100,
+            });
+            const already = comments.some(c =>
+              c.body && c.body.includes('<!-- adlc-audit ') && c.body.includes(`"sha":"${sha}"`));
+            if (already) { core.info(`Audit marker for ${sha} already present; skipping.`); return; }
+
+            const body = [
+              '🔒 **ADLC governance audit** — deterministic record (derived from the review outcome + run metadata, not from model output).',
+              '',
+              `- Decision: \`${decision}\``,
+              `- Blocking findings: ${blocking ? 'yes' : 'no'}`,
+              `- Head: \`${sha}\``,
+              `- Review run: ${run.html_url}`,
+              '',
+              marker,
+            ].join('\n');
+            await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            core.info(`Posted deterministic governance audit for PR #${issue_number}: ${decision}`);

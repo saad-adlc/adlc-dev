@@ -46,7 +46,11 @@ Test suite **40 → 47** assertions (7 new: absolute-in-ws allow, absolute other
 
 ## Deferred: the audit marker (WS6 follow-up)
 
-The governance comment already carries gh-aw's **immutable, attributed provenance footer** (workflow id, run URL, model, AIC cost), and the decision is both in the comment text and deterministically signalled by the `adlc-iterate` label (applied ⟺ blocking findings). The custom agent-emitted JSON marker is therefore partly redundant and, more importantly, **shouldn't depend on the model**. Options considered (decision deferred by the user):
+The governance comment already carries gh-aw's **immutable, attributed provenance footer** (workflow id, run URL, model, AIC cost), and the decision is both in the comment text and deterministically signalled by the `adlc-iterate` label (applied ⟺ blocking findings). The custom agent-emitted JSON marker is therefore partly redundant and, more importantly, **shouldn't depend on the model**.
+
+> **Reinforced by the stress run (PR #42):** the agent emits a *different* audit format each time — **nothing** on PR #40, a plain-text `ADLC-GOVERNANCE-AUDIT: pr=42 … decision=observations-only blocking=0 advisory=3 …` line on PR #42, and never the specified `<!-- adlc-audit {JSON} -->`. It's not that the agent forgets to audit — it **improvises the format**, which is exactly why it must be deterministic.
+
+Options considered (decision deferred by the user):
 - **Accept gh-aw's footers** as the audit trail (drop the custom marker; simplest, fully deterministic).
 - **Deterministic audit step** that writes `{decision,findings,sha,pr}` from the label + run metadata (most faithful to the original intent, no model trust).
 - ~~Harden the prompt~~ — rejected in spirit: keeps it model-dependent (the exact principle we just violated).
@@ -58,6 +62,23 @@ The governance comment already carries gh-aw's **immutable, attributed provenanc
 - **T8.7** iterate (`/adlc-iterate:` → fix commit → cap at 3).
 - **Branch protection (INFRA §F)** on `main` — still **off** (verified 404). Gates *merge*, not generate; required for the WS6 merge-governance test.
 
+## Stress test (2026-06-22) — heavier app, **zero fixes needed**
+
+After the three fixes landed, a substantially heavier app was run to test the pipeline under load: an **investment portfolio dashboard** (issue #41 → **PR #42**) — a computed holdings table, an inline-SVG allocation chart, and four actions (add / remove / edit-price / sort). It passed end-to-end on the **first try, no fixes required** — the strongest possible robustness signal.
+
+| Stressor | Result |
+|---|---|
+| Agent turn budget (finish a big TDD job) | ✅ completed — **20 files**, no run-out (the #36 failure mode did not recur) |
+| Architecture | ✅ `src/components/{AddHoldingForm,AllocationChart,PortfolioTable}.tsx` + `types.ts`/`utils.ts`/`data.ts` + 156-line `App.test.tsx` |
+| **Stack adherence** (spec wanted graphs) | ✅ dependencies = **exactly `react`/`react-dom`** — no charting library added |
+| SVG chart hand-rolled | ✅ `AllocationChart.tsx` = inline `<svg>`/`<rect>` bars |
+| Coverage gate on more branches | ✅ **100% stmts / 94.18% branch / 100% funcs / 100% lines** (floor 80%) |
+| Deny hook under many writes | ✅ clean — abspath fix held; agent used `Write` throughout |
+| PR / CI / preview | ✅ PR #42 under the PAT · `adlc-ci` green · preview **HTTP 200, renders** (`previews/pr-42-issue-41-portfolio-dashboard/`) |
+| Governance review on a bigger diff | ✅ `observations-only`; 3 *sharp* advisories (incl. a real negative-price guard gap) — advisory, never blocked/approved |
+
+**Takeaway:** the hello-world surfaced 3 infra bugs; the heavier app surfaced **none**. The spine is robust and respects the approved stack even when the spec pushes against it. (The audit-format wrinkle above is the one carried-over WS6 item.)
+
 ## Test artifacts to clean up
 
-Issues #33/#36/#39 (test triggers, created this session), auto-created review issue #34, test PR #40, and orphan branches `feature/issue-33-hello-greeting` (pushed by the pre-PAT run) + `feature/issue-39-hello-greeting`. Safe to close/delete once this record is reviewed.
+Issues #33/#36/#39/#41 (test triggers, created this session), auto-created review issue #34, test PRs #40 + #42, and orphan branches `feature/issue-33-hello-greeting` (pushed by the pre-PAT run) + `feature/issue-39-hello-greeting` + `feature/issue-41-portfolio-dashboard`. Safe to close/delete once this record is reviewed (keep #41/PR #42 + #39/PR #40 if you still want their live previews).
