@@ -1,0 +1,68 @@
+.inputSection {
+  margin-bottom: 2rem;
+}
+
+.toggle {
+  display: flex;
+  margin-bottom: 1rem;
+}
+
+.toggleBtn,
+.toggleActive {
+  padding: 0.5rem 1.5rem;
+  border: 1px solid #ccc;
+  background: #fff;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.toggleBtn:first-child,
+.toggleActive:first-child {
+  border-radius: 4px 0 0 4px;
+  border-right: none;
+}
+
+.toggleBtn:last-child,
+.toggleActive:last-child {
+  border-radius: 0 4px 4px 0;
+}
+
+.toggleActive {
+  background: #0060df;
+  color: #fff;
+  border-color: #0060df;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-width: 320px;
+}
+
+.label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.input {
+  padding: 0.625rem 0.75rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 1.25rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.input:focus {
+  outline: 2px solid #0060df;
+  outline-offset: 1px;
+}
+
+.equivalent {
+  margin-top: 0.5rem;
+  color: #555;
+  font-size: 0.9rem;
+}
