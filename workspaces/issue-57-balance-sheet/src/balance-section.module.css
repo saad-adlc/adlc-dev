@@ -1,0 +1,99 @@
+.section {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 1.5rem;
+  flex: 1;
+  min-width: 220px;
+}
+
+.title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0 0 1rem;
+  color: #1a202c;
+}
+
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.75rem;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+  flex-wrap: nowrap;
+}
+
+.nameInput {
+  flex: 2;
+  border: 1px solid #cbd5e0;
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+  min-width: 0;
+}
+
+.amountInput {
+  width: 90px;
+  flex-shrink: 0;
+  border: 1px solid #cbd5e0;
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+  text-align: right;
+}
+
+.invalid {
+  border-color: #e53e3e;
+  background: #fff5f5;
+}
+
+.invalidMsg {
+  color: #e53e3e;
+  font-size: 0.7rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.removeBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #a0aec0;
+  font-size: 1.125rem;
+  padding: 0 2px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.removeBtn:hover {
+  color: #e53e3e;
+}
+
+.subtotal {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #2d3748;
+  margin: 0.5rem 0;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 0.4rem;
+}
+
+.addBtn {
+  background: none;
+  border: 1px dashed #a0aec0;
+  border-radius: 4px;
+  padding: 0.2rem 0.6rem;
+  cursor: pointer;
+  color: #718096;
+  font-size: 0.8rem;
+}
+
+.addBtn:hover {
+  border-color: #4a5568;
+  color: #4a5568;
+}
