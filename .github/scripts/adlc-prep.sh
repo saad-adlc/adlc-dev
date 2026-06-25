@@ -128,11 +128,12 @@ EOF
   chmod +x .claude/hooks/pretooluse-deny.sh
   cp .adlc-standards/hooks/settings.template.json .claude/settings.json
   cp .adlc-standards/constitution.md ./constitution.md
-  cp -r .adlc-standards/steering ./steering
+  cp -r .adlc-standards/steering ./steering   # includes steering/approved-packages.json (WS8 allow-list)
+  cp -r .adlc-standards/ai-dev ./ai-dev        # WS8: Orix React + global standards the agent must follow
   cp .adlc-standards/vendor/spec-kit/templates/spec-template.md  .speckit/spec-template.md
   cp .adlc-standards/vendor/spec-kit/templates/plan-template.md  .speckit/plan-template.md
   cp .adlc-standards/vendor/spec-kit/templates/tasks-template.md .speckit/tasks-template.md
-  printf '%s\n' '.adlc-standards/' '.claude/' 'constitution.md' 'steering/' '.speckit/' >> .git/info/exclude
+  printf '%s\n' '.adlc-standards/' '.claude/' 'constitution.md' 'steering/' '.speckit/' 'ai-dev/' >> .git/info/exclude
 
   # --- status scaffolding, written but LEFT UNCOMMITTED (Fallback B = default) ---
   # The agent's single `git add "$ADLC_WORKSPACE"` will stage the scaffold + this
