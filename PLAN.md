@@ -283,7 +283,9 @@ Each workstream lists: **deliverables**, **files touched**, **acceptance criteri
 
 ---
 
-### WS8 — Orix `ai-dev/` standards integration  *(PENDING; scoped 2026-06-24)*
+### WS8 — Orix `ai-dev/` standards integration  *(✅ DONE — validated live 2026-06-25)*
+
+> **Done (2026-06-25):** allow-list validator (default-deny) + `adlc-ci` gate + scaffold `max-lines` lint + mounted `ai-dev/` rules + controlled installs + extended reviewer + steering reconcile — all built. **Live-validated on PR #51** (issue #50 "Expense dashboard"): the agent installed approved `react-router-dom`, the gate passed ("all direct dependencies are approved"), files are kebab-case + CSS Modules, the chart is hand-rolled SVG. ESLint plugins (JSDoc / no-inline-styles / unicorn filename-case) remain a fast-follow.
 
 **Goal** Generated code follows the **Orix `ai-dev/` standards** (React style + global behavior + validation), not just the light `steering/` rules. Today the **primary gh-aw path reads only `steering/`**; only the hand-rolled fallback reads `ai-dev/` (`CLAUDE.md` + `ai-dev/rules/react/style.md`) — so the two engines drift on standards.
 
@@ -304,7 +306,9 @@ Each workstream lists: **deliverables**, **files touched**, **acceptance criteri
 
 ---
 
-### WS9 — Per-run budget cap  *(PENDING; scoped 2026-06-24)*
+### WS9 — Per-run budget cap  *(✅ DONE 2026-06-25)*
+
+> **Done:** top-level **`max-turns: 50`** on `adlc-generate.md` (avoided the deprecated `engine.max-turns` alias) → baked into the lock as `--max-turns 50`; daily 5000-AIC ceiling unchanged. A per-run AIC cap (`GH_AW_MAX_AI_CREDITS` / `apiProxy.maxAiCredits`) is available if wanted.
 
 **Goal** A hard **per-run** ceiling on agent work. Today only a **daily 5000-AIC** guardrail exists (gh-aw default — `GH_AW_DEFAULT_MAX_DAILY_AI_CREDITS` is unset); there is **no per-run limit**.
 
@@ -314,7 +318,21 @@ Each workstream lists: **deliverables**, **files touched**, **acceptance criteri
 
 **AC** A run that loops past ~50 turns is stopped (visible in the run log); normal runs unaffected; the daily cap is unchanged.
 
-**Open** Verify gh-aw exposes `engine.max-turns` (claude-code-action passthrough); if a **per-run AIC** cap is also supported, consider adding it alongside.
+**Open** ~~Verify gh-aw exposes `engine.max-turns`~~ — resolved: it is **deprecated**; used the **top-level `max-turns`** field instead. A per-run AIC cap (`GH_AW_MAX_AI_CREDITS`) is available if wanted.
+
+---
+
+### WS10 — Enforce the full merge gate  *(NEXT; scoped 2026-06-25)*
+
+**Goal** Make branch protection actually enforce **CI-green + business approval**, not just CodeQL. Today the only required checks are the two CodeQL `Analyze` jobs; **`CI — Node/React` + `adlc/business-approval` run but do not gate merge** — the `[skip ci]` `status.json` commits move the PR head *past* the commit those checks ran on (the "moving-head" problem, drift-log **D-8**). So a human could merge a PR whose head has absent/red CI — a real hole in the no-direct-merge promise.
+
+**Decision (scoped 2026-06-25)** **Decouple `status.json` from the PR branch.** Post-PR status (`pr-open` / `clean` / `deploying` / `preview-deployed`) moves to a **PR comment** updated in place (or the issue), instead of `[skip ci]` branch commits. The PR head then stays at the **code commit**, so `CI — Node/React` + `adlc/business-approval` sit on the head and can be **added to required checks**. The WS7 monitor already reads the preview comment + native events, so chat-side liveness is unaffected (it aligns with `2026-06-19-ws7-live-ui-design.md`).
+
+**Files** `adlc-dev/.github/workflows/adlc-status-pr.yml`, `adlc-ci.yml` (the `Status -> clean` step), `adlc-preview.yml` (the `deploying`/`preview-deployed` commits) → switch from branch commits to a PR-comment channel; then INFRA §F → add `CI — Node/React` + `adlc/business-approval` to required checks.
+
+**AC** A PR cannot merge until `CI — Node/React` is green **and** `adlc/business-approval` is success on the head (in addition to CodeQL); status still reaches the chat; no `[skip ci]` commit moves the head past the gate.
+
+**Pairs with** the **distinct bot identity** (D-7): WS10 lands the *CI + approval-status* requirement; the *human* CODEOWNERS-approval requirement follows once the bot identity exists (else the solo maintainer can't approve the bot's own PR).
 
 ---
 
@@ -357,5 +375,7 @@ A new feature, driven entirely from a fresh claude.ai chat, results in:
 - **Audit marker (WS6) — deferred (2026-06-22):** the governance reviewer omits the `<!-- adlc-audit … -->` JSON because it depended on the agent emitting it. Decide: accept gh-aw's immutable footers as the audit trail, or add a deterministic audit step keyed off the `adlc-iterate` label + run metadata. (Leaning: gh-aw footers + the label already give deterministic provenance.)
 - **Live activation remaining:** **T8.5** 2-strike fail-over, **T8.6** engine switch (`ADLC_ENGINE=legacy`), **T8.7** iterate loop — not yet exercised live; **branch protection (§F)** still OFF (verified 404).
 - **Smoke validated (2026-06-22):** gh-aw generate happy-path proven end-to-end (issue #39 → PR #40 → live preview); 3 fixes landed (engine var, create-PR PAT, hook abspath). See §1c + `docs/superpowers/2026-06-22-ghaw-generate-smoke-outcome.md`.
-- **WS8 + WS9 (scoped 2026-06-24, PENDING):** integrate the **Orix `ai-dev/` standards** into the primary gh-aw path (controlled package installs + mount `ai-dev/` + reviewer checks) and add a **per-run `max-turns ≈ 50`** cap. See §4 WS8/WS9 + `docs/superpowers/2026-06-24-drift-and-decisions-log.md`.
+- **WS8 + WS9 — ✅ DONE + validated live (2026-06-25):** Orix `ai-dev/` standards integrated (controlled installs + mounted rules + allow-list gate + extended reviewer) and per-run `max-turns 50`. Proven on PR #51 (issue #50). See §4.
+- **WS10 — NEXT (scoped 2026-06-25):** enforce the **full merge gate** — decouple `status.json` from the PR branch so `CI — Node/React` + `adlc/business-approval` become required checks (today only CodeQL gates merge — drift-log D-8). Pairs with the distinct-bot-identity follow-up (D-7) for required *human* approval. See §4 WS10.
+- **Other open workstreams:** WS1 (vendor-sync bot); WS5 (`dependabot.yml` + secret-scan push-protection); WS7 real claude.ai run (MCP §C + upload `adlc-bootstrap`); WS8 ESLint-plugins fast-follow (JSDoc / no-inline-styles / unicorn).
 ```
