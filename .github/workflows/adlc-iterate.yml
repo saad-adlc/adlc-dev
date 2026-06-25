@@ -8,8 +8,8 @@
 #   - `/adlc-iterate:` PR comment (chat relays business feedback this way)
 #
 # Cap: 3 iterations, counted from `iteration-` commits since main.
-# Status-only commits use [skip ci] so they never retrigger adlc-ci;
-# the actual fix push (via ADLC_AGENT_TOKEN) DOES retrigger it — that's the loop.
+# Live status is posted to the PR's single status comment (WS10) — no status-only
+# branch commits. The fix push (via ADLC_AGENT_TOKEN) retriggers adlc-ci — that's the loop.
 #
 # Secrets reused from adlc-generate.yml: ADLC_AGENT_TOKEN, CLAUDE_API_KEY.
 
@@ -113,19 +113,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
         run: |
-          SLUG=${{ steps.ctx.outputs.slug }}
-          mkdir -p "workspaces/${SLUG}/.adlc"
-          cat > "workspaces/${SLUG}/.adlc/status.json" << JSON
-          { "stage": "escalated", "iteration": 3,
-            "pr": ${{ steps.ctx.outputs.pr }}, "preview_url": null,
-            "detail": "Automatic fixing stopped after 3 attempts — human input needed",
-            "updated": "$(date -u +%Y-%m-%dT%H:%M:%SZ)" }
-          JSON
-          git config user.name "adlc-agent"
-          git config user.email "adlc-agent@saad-adlc.com"
-          git add "workspaces/${SLUG}/.adlc/status.json"
-          git commit -m "chore(${SLUG}): status -> escalated [skip ci]"
-          git push origin ${{ steps.ctx.outputs.branch }}
+          # WS10: update the status comment instead of committing a [skip ci]
+          # status.json — that commit moved the PR head to a CI-less commit.
+          bash .github/scripts/post-status-comment.sh \
+            "${{ steps.ctx.outputs.pr }}" \
+            "escalated" \
+            "Automatic fixing stopped after 3 attempts — human input needed."
+          # Keep the louder, actionable notification as its own comment.
           gh pr comment ${{ steps.ctx.outputs.pr }} \
             --body "⚠️ **ADLC iterate: cap reached (3/3).** Human input needed — adjust the requirement via chat, or push a manual fix to this branch."
 
@@ -152,18 +146,17 @@ jobs:
           curl -fsSL https://claude.ai/install.sh | bash
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Write status -> iterating (no push — committed with the fix)
+      - name: Status -> iterating (in-place comment — no status.json write)
         if: steps.cap.outputs.capped != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
         run: |
-          SLUG=${{ steps.ctx.outputs.slug }}
-          mkdir -p "workspaces/${SLUG}/.adlc"
-          cat > "workspaces/${SLUG}/.adlc/status.json" << JSON
-          { "stage": "iterating",
-            "iteration": ${{ steps.cap.outputs.next }},
-            "pr": ${{ steps.ctx.outputs.pr }}, "preview_url": null,
-            "detail": "Fixing — attempt ${{ steps.cap.outputs.next }} of 3",
-            "updated": "$(date -u +%Y-%m-%dT%H:%M:%SZ)" }
-          JSON
+          # WS10: live status is the PR comment now (the monitor reads it). The fix
+          # commit below carries real code + spec.md, so it legitimately retriggers CI.
+          bash .github/scripts/post-status-comment.sh \
+            "${{ steps.ctx.outputs.pr }}" \
+            "iterating" \
+            "Fixing — attempt ${{ steps.cap.outputs.next }} of 3."
 
       - name: Run Claude Code iterate agent
         if: steps.cap.outputs.capped != 'true'
@@ -193,19 +186,18 @@ jobs:
           3. Minimal fix only — no refactors, no new dependencies, no deleted tests
           4. Run: cd %s && npm run ci
           5. Fix until npm run ci passes
-          6. Update the "detail" field in %s/.adlc/status.json with a one-line
-             summary of what you fixed, in plain business language — NO file
-             paths, NO error codes, NO tool names (keep stage "iterating")
-          7. Append a dated entry to "## Change log" in %s/spec.md (create the
+          6. Append a dated entry to "## Change log" in %s/spec.md (create the
              section if missing): "- [YYYY-MM-DD] iteration-N: [what changed,
              in plain language, and what triggered it]"
-          8. Do NOT commit — the workflow handles git
+          7. Do NOT commit — the workflow handles git
+             (Live status is posted by the workflow as a PR comment — you do not
+             touch .adlc/status.json.)
 
           ' \
             "${{ steps.cap.outputs.next }}" "${{ steps.ctx.outputs.pr }}" \
             "$WORKSPACE" \
             "${{ steps.ctx.outputs.task }}" \
-            "$WORKSPACE" "$WORKSPACE" "$WORKSPACE" \
+            "$WORKSPACE" "$WORKSPACE" \
             | claude --print \
               --permission-mode bypassPermissions \
               --allowed-tools "Write,Edit,Read,Bash,Glob,Grep" \
@@ -234,8 +226,8 @@ jobs:
             exit 0
           fi
           echo "committed=true" >> $GITHUB_OUTPUT
-          # Status.json rides along in this commit. This push (PAT) retriggers
-          # adlc-ci — exactly the loop we want: fix -> CI -> pass or iterate again.
+          # The fix (code + spec.md change log) is committed here. This push (PAT)
+          # retriggers adlc-ci — exactly the loop we want: fix -> CI -> pass or iterate again.
           git commit -m "fix(${{ steps.ctx.outputs.slug }}): iteration-${{ steps.cap.outputs.next }}
 
           PR: #${{ steps.ctx.outputs.pr }}
