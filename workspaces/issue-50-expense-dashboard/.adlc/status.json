@@ -1,8 +1,4 @@
-{
-  "stage": "deploying",
-  "iteration": 0,
-  "pr": 51,
-  "preview_url": null,
-  "detail": "Publishing the live preview",
-  "updated": "2026-06-25T07:48:06Z"
-}
+{ "stage": "preview-deployed", "iteration": 0, "pr": 51,
+  "preview_url": "https://saad-adlc.github.io/adlc-dev/previews/pr-51-issue-50-expense-dashboard/",
+  "detail": "Live preview deployed",
+  "updated": "2026-06-25T07:48:19Z" }
