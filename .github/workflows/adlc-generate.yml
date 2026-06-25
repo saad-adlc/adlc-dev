@@ -395,24 +395,21 @@ jobs:
           - Approve and merge when satisfied")
           echo "number=${PR_URL##*/}" >> $GITHUB_OUTPUT              # >>> STATUS PATCH
 
-      # >>> STATUS PATCH — recreate helper (deleted before commit) and mark pr-open
-      - name: Status -> pr-open
+      # WS10: post-PR status is an in-place PR comment, NOT a [skip ci] branch commit
+      # (that commit moved the PR head past the CI-bearing code commit). Mirrors the
+      # gh-aw path's adlc-status-pr.yml (which ALSO fires on this PR's `opened` event,
+      # so this is idempotent belt-and-suspenders — both upsert the same marker comment).
+      # The pre-PR scaffolding/generating status commits above stay — they are branch
+      # history before the PR exists, so they never become the head CI runs against.
+      - name: Status -> pr-open (in-place comment — no branch commit)
         if: steps.commit.outputs.committed == 'true'
         env:
-          SLUG: ${{ steps.branch.outputs.slug }}
-          BRANCH: ${{ steps.branch.outputs.name }}
-          PR: ${{ steps.pr.outputs.number }}
+          GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
         run: |
-          mkdir -p "workspaces/${SLUG}/.adlc"
-          cat > "workspaces/${SLUG}/.adlc/status.json" << JSON
-          { "stage": "pr-open", "iteration": 0, "pr": ${PR},
-            "preview_url": null,
-            "detail": "Built and packaged — automated checks running",
-            "updated": "$(date -u +%Y-%m-%dT%H:%M:%SZ)" }
-          JSON
-          git add "workspaces/${SLUG}/.adlc/status.json"
-          git commit -m "chore(${SLUG}): status -> pr-open [skip ci]"
-          git push origin "${BRANCH}"
+          bash .github/scripts/post-status-comment.sh \
+            "${{ steps.pr.outputs.number }}" \
+            "pr-open" \
+            "Built and packaged — automated checks are running."
 
       - name: Notify failure
         if: failure()

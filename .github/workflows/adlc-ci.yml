@@ -107,27 +107,16 @@ jobs:
     needs: [ci-node]
     if: success() && startsWith(github.head_ref, 'feature/issue-')
     runs-on: ubuntu-latest
+    # WS10: comment instead of committing -> the PR head stays at the code commit.
     permissions:
-      contents: write
+      pull-requests: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
-          token: ${{ secrets.ADLC_AGENT_TOKEN }}
-      - name: Write clean status
+      - uses: actions/checkout@v4   # for .github/scripts/post-status-comment.sh
+      - name: Post status -> clean (in-place comment)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          BRANCH="${{ github.head_ref }}"
-          SLUG="${BRANCH#feature/}"
-          mkdir -p "workspaces/${SLUG}/.adlc"
-          ITER=$(jq -r '.iteration // 0' "workspaces/${SLUG}/.adlc/status.json" 2>/dev/null || echo 0)
-          cat > "workspaces/${SLUG}/.adlc/status.json" << JSON
-          { "stage": "clean", "iteration": ${ITER},
-            "pr": ${{ github.event.pull_request.number }},
-            "preview_url": null,
-            "detail": "All checks passed — deploying preview",
-            "updated": "$(date -u +%Y-%m-%dT%H:%M:%SZ)" }
-          JSON
-          git config user.name "adlc-agent"
-          git config user.email "adlc-agent@saad-adlc.com"
-          git add "workspaces/${SLUG}/.adlc/status.json"
-          git diff --cached --quiet || { git commit -m "chore(${SLUG}): status -> clean [skip ci]"; git push origin "${{ github.head_ref }}"; }
+          bash .github/scripts/post-status-comment.sh \
+            "${{ github.event.pull_request.number }}" \
+            "clean" \
+            "All automated checks passed — deploying your live preview."

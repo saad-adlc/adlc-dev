@@ -286,7 +286,17 @@ Business user opens the live preview and gives feedback in chat.
 
 ### Status Channel
 
-Every CI workflow writes/reads `workspaces/[slug]/.adlc/status.json` on the feature branch. This is the only communication channel between CI and the chat orchestrator.
+Originally `status.json` on the feature branch was the only CI↔chat channel. **WS10
+(2026-06-25, drift-log D-8) decoupled it:** the `[skip ci]` `status.json` commits moved the
+PR head *past* `CI — Node/React` + `adlc/business-approval`, so those could not become
+required checks (the moving-head problem). Now:
+- **Live status** = a **single PR comment** (hidden marker `<!-- adlc-status -->`), upserted
+  in place by `.github/scripts/post-status-comment.sh` as the build moves through its stages.
+- **Preview URL** = the **dedicated 🔍 preview comment** (unchanged).
+- **`status.json`** is written **once** in the agent's initial code commit as a git-tracked
+  record and is **not** updated on the branch afterward.
+
+The schema below is that initial record (and the per-stage `{stage, detail}` shape the status comment renders).
 
 ```json
 {
@@ -309,7 +319,7 @@ Every CI workflow writes/reads `workspaces/[slug]/.adlc/status.json` on the feat
 
 After issue creation, after relaying feedback, or on any status question while `in-ci`:
 
-1. Read `status.json` via `get_file_contents` (ref: branch)
+1. Read the **status comment** (the PR comment containing `<!-- adlc-status -->`) for the current stage + detail; read the dedicated 🔍 preview comment for the preview URL. *(Post-WS10: no longer `status.json` via `get_file_contents`.)*
 2. Apply stall rule first
 3. If stage changed since last poll, append one plain-English progress line
 4. If terminal stage (`preview-deployed`, `deploy-failed`, `escalated`) → handle and end loop
@@ -519,13 +529,13 @@ These rules must be maintained in any re-implementation:
 1. **Slug algorithm must be byte-identical** between the issue-creation path and the CI scaffold path — or the status-poll will 404
 2. **No source files from the orchestration layer** — code is written only by Claude Code in CI, never by the chat agent or bot
 3. **One build at a time** — queue, never run two simultaneously
-4. **`detail` in status.json is for CI internal use** — always paraphrase before surfacing to any user
+4. **The status `detail` is for CI internal use** — always paraphrase before surfacing to any user *(post-WS10 it is the plain-English line in the `<!-- adlc-status -->` PR comment)*
 5. **`ADLC_PAT` not `GITHUB_TOKEN` for Claude Code pushes** — default token does not re-trigger workflows on self-push
 6. **Issue is created after wireframe confirm, not after spec confirm** — the layout section must be in the issue body so CI has it when committing spec.md
 7. **Spec rollback always creates a new issue** — never reuse old issue numbers
 8. **`deploy-failed` is not routed to auto-iterate** — it is a publishing infrastructure failure, not a code failure
 9. **Wireframe uses `sendPrompt()`** for buttons, not form submits — the sandbox blocks form submits and iframes
-10. **Preview link is always read from `status.json`**, never constructed by hand — the URL is set by CI and is authoritative
+10. **Preview link is always read from the dedicated 🔍 preview comment** *(post-WS10; was `status.json.preview_url`)*, never constructed by hand — the URL is set by CI and is authoritative
 
 ---
 

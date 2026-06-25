@@ -57,26 +57,24 @@ jobs:
           echo "preview_url=https://saad-adlc.github.io/adlc-dev/previews/pr-${PR_NUMBER}-${WORKSPACE}/" >> $GITHUB_OUTPUT
           echo "Workspace: $WORKSPACE | PR: $PR_NUMBER"
 
-      - name: Status -> deploying (via API — working tree untouched)
+      # WS10: stash the status-comment script to a temp dir BEFORE the gh-pages
+      # checkout wipes the working tree (gh-pages is an orphan branch without
+      # .github/scripts/). All three status steps below call this temp copy.
+      - name: Stash status script (survives the gh-pages checkout)
+        if: steps.detect.outputs.workspace != ''
+        run: cp .github/scripts/post-status-comment.sh "$RUNNER_TEMP/post-status-comment.sh"
+
+      - name: Status -> deploying (in-place comment — no branch commit)
         if: steps.detect.outputs.workspace != ''
         env:
           GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
         run: |
-          BRANCH="${{ github.event.workflow_run.pull_requests[0].head.ref }}"
-          SLUG="${BRANCH#feature/}"
-          FILE="workspaces/${SLUG}/.adlc/status.json"
-          CUR=$(gh api "/repos/${{ github.repository }}/contents/${FILE}?ref=${BRANCH}" 2>/dev/null || echo '{}')
-          SHA=$(echo "$CUR" | jq -r '.sha // empty')
-          ITER=$(echo "$CUR" | jq -r '.content // ""' | base64 -d 2>/dev/null | jq -r '.iteration // 0' || echo 0)
-          BODY=$(jq -n --arg s deploying --argjson i "$ITER" \
-            --argjson pr "${{ steps.detect.outputs.pr_number }}" \
-            '{stage:$s, iteration:$i, pr:$pr, preview_url:null,
-              detail:"Publishing the live preview", updated:(now|todate)}')
-          gh api --method PUT "/repos/${{ github.repository }}/contents/${FILE}" \
-            -f message="chore(${SLUG}): status -> deploying [skip ci]" \
-            -f branch="$BRANCH" \
-            -f content="$(printf '%s' "$BODY" | base64 -w0)" \
-            $( [ -n "$SHA" ] && printf -- '-f sha=%s' "$SHA" )
+          # WS10: update the single status comment instead of committing status.json
+          # to the feature branch (a [skip ci] commit would move the PR head past CI).
+          bash "$RUNNER_TEMP/post-status-comment.sh" \
+            "${{ steps.detect.outputs.pr_number }}" \
+            "deploying" \
+            "Publishing the live preview."
 
       - name: Setup Node 20
         if: steps.detect.outputs.workspace != ''
@@ -133,35 +131,19 @@ jobs:
             git push origin gh-pages
           fi
 
-      - name: Status -> preview-deployed
+      - name: Status -> preview-deployed (in-place comment — no branch commit)
         if: steps.detect.outputs.workspace != ''
         env:
           GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
         run: |
-          BRANCH="${{ github.event.workflow_run.pull_requests[0].head.ref }}"
-          PR=${{ steps.detect.outputs.pr_number }}
-          SLUG="${BRANCH#feature/}"
-
-          git config user.name "adlc-agent"
-          git config user.email "adlc-agent@saad-adlc.com"
-
-          # IMPORTANT: checkout the feature branch FIRST — the working tree is
-          # currently on gh-pages, and writing status.json before switching
-          # would block the checkout (untracked file would be overwritten).
-          git fetch origin "$BRANCH"
-          git checkout "$BRANCH"
-
-          mkdir -p "workspaces/${SLUG}/.adlc"
-          ITER=$(jq -r '.iteration // 0' "workspaces/${SLUG}/.adlc/status.json" 2>/dev/null || echo 0)
-          [ -z "$ITER" ] && ITER=0
-          cat > "workspaces/${SLUG}/.adlc/status.json" << JSON
-          { "stage": "preview-deployed", "iteration": ${ITER}, "pr": ${PR},
-            "preview_url": "${{ steps.detect.outputs.preview_url }}",
-            "detail": "Live preview deployed",
-            "updated": "$(date -u +%Y-%m-%dT%H:%M:%SZ)" }
-          JSON
-          git add "workspaces/${SLUG}/.adlc/status.json"
-          git diff --cached --quiet || { git commit -m "chore(${SLUG}): status -> preview-deployed [skip ci]"; git push origin "$BRANCH"; }
+          # WS10: the working tree is on gh-pages here, so we no longer switch back
+          # to the feature branch to write status.json (that [skip ci] commit moved
+          # the PR head past CI). Just update the status comment via the API; the
+          # clickable preview URL is posted by the dedicated preview comment below (Q3).
+          bash "$RUNNER_TEMP/post-status-comment.sh" \
+            "${{ steps.detect.outputs.pr_number }}" \
+            "preview-deployed" \
+            "Your live preview is ready — the link is in the preview comment below."
 
       - name: Post preview URL as PR comment
         if: steps.detect.outputs.workspace != ''
@@ -193,23 +175,14 @@ jobs:
           > This preview updates automatically when new commits are pushed and CI passes.
           > To request changes, reply in your Claude chat — the ADLC agent will iterate and redeploy."
 
-      - name: Status -> deploy-failed
+      - name: Status -> deploy-failed (in-place comment — no branch commit)
         if: failure() && steps.detect.outputs.workspace != ''
         env:
           GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
         run: |
-          BRANCH="${{ github.event.workflow_run.pull_requests[0].head.ref }}"
-          SLUG="${BRANCH#feature/}"
-          FILE="workspaces/${SLUG}/.adlc/status.json"
-          CUR=$(gh api "/repos/${{ github.repository }}/contents/${FILE}?ref=${BRANCH}" 2>/dev/null || echo '{}')
-          SHA=$(echo "$CUR" | jq -r '.sha // empty')
-          ITER=$(echo "$CUR" | jq -r '.content // ""' | base64 -d 2>/dev/null | jq -r '.iteration // 0' || echo 0)
-          BODY=$(jq -n --arg s deploy-failed --argjson i "$ITER" \
-            --argjson pr "${{ steps.detect.outputs.pr_number }}" \
-            '{stage:$s, iteration:$i, pr:$pr, preview_url:null,
-              detail:"The app is built and safe, but publishing the preview failed — needs a manual look", updated:(now|todate)}')
-          gh api --method PUT "/repos/${{ github.repository }}/contents/${FILE}" \
-            -f message="chore(${SLUG}): status -> deploy-failed [skip ci]" \
-            -f branch="$BRANCH" \
-            -f content="$(printf '%s' "$BODY" | base64 -w0)" \
-            $( [ -n "$SHA" ] && printf -- '-f sha=%s' "$SHA" )
+          # WS10: failure may happen before or after the gh-pages checkout. The stash
+          # step runs right after detect, so the temp copy is present either way.
+          bash "$RUNNER_TEMP/post-status-comment.sh" \
+            "${{ steps.detect.outputs.pr_number }}" \
+            "deploy-failed" \
+            "The app is built and safe, but publishing the preview failed — needs a manual look."
