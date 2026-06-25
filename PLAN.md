@@ -322,13 +322,18 @@ Each workstream lists: **deliverables**, **files touched**, **acceptance criteri
 
 ---
 
-### WS10 — Enforce the full merge gate  *(NEXT; scoped 2026-06-25)*
+### WS10 — Enforce the full merge gate  *(IMPLEMENTED on `feature/ws10-merge-gate` 2026-06-25; pending merge → live validation → required-checks)*
 
 **Goal** Make branch protection actually enforce **CI-green + business approval**, not just CodeQL. Today the only required checks are the two CodeQL `Analyze` jobs; **`CI — Node/React` + `adlc/business-approval` run but do not gate merge** — the `[skip ci]` `status.json` commits move the PR head *past* the commit those checks ran on (the "moving-head" problem, drift-log **D-8**). So a human could merge a PR whose head has absent/red CI — a real hole in the no-direct-merge promise.
 
 **Decision (scoped 2026-06-25)** **Decouple `status.json` from the PR branch.** Post-PR status (`pr-open` / `clean` / `deploying` / `preview-deployed`) moves to a **PR comment** updated in place (or the issue), instead of `[skip ci]` branch commits. The PR head then stays at the **code commit**, so `CI — Node/React` + `adlc/business-approval` sit on the head and can be **added to required checks**. The WS7 monitor already reads the preview comment + native events, so chat-side liveness is unaffected (it aligns with `2026-06-19-ws7-live-ui-design.md`).
 
-**Files** `adlc-dev/.github/workflows/adlc-status-pr.yml`, `adlc-ci.yml` (the `Status -> clean` step), `adlc-preview.yml` (the `deploying`/`preview-deployed` commits) → switch from branch commits to a PR-comment channel; then INFRA §F → add `CI — Node/React` + `adlc/business-approval` to required checks.
+**Files** `adlc-dev/.github/scripts/post-status-comment.sh` (+ TDD tests) is the in-place upsert. Rewired off `[skip ci]` status commits → the comment channel: `adlc-status-pr.yml` (`pr-open`), `adlc-ci.yml` (`Status -> clean`), `adlc-preview.yml` (`deploying`/`preview-deployed`/`deploy-failed`), `adlc-iterate.yml` (`iterating`/`escalated`), and — **discovered during the rewire** (the dep-map missed it) — `adlc-generate.yml` (legacy/fallback `Status -> pr-open`). The WS7 monitor (`adlc-standards/skills/adlc-bootstrap/SKILL.md`) now reads the status comment + preview comment (branch `feature/ws10-bootstrap-monitor`). Then INFRA §F → add `CI — Node/React` + `adlc/business-approval` to required checks.
+
+**Built (2026-06-25), pending validation:**
+- ✅ ① upsert script + tests (6/6) — `933d519`;  ✅ ② all head-movers rewired — `8e0fdb8` + `8116e3e`;  ✅ ③ monitor — adlc-standards `59c06cf`;  ✅ ⑥(partial) docs (this §4 entry + HANDOFF §5/§12 + drift-log D-8).
+- ⏳ **Order matters:** the rewired `pull_request`/`workflow_run` workflows only take effect **once merged to `main`**. So: **merge the WS10 PR → ④ run one test-generate** (confirm the PR head carries `CI — Node/React` + `adlc/business-approval`, with no `[skip ci]` commit past them) → **⑤ add both to required checks** (`gh api`) → flip this to DONE + close D-8.
+- **Kept (deliberate):** the gh-pages deploy push (a different branch — never moves the PR head), the dedicated 🔍 preview comment (Q3), the agent's **initial** `status.json` code-commit record (Q2), and legacy-generate's **pre-PR** scaffold/scaffolding/generating commits (branch history before the PR exists, so never the head CI runs against).
 
 **AC** A PR cannot merge until `CI — Node/React` is green **and** `adlc/business-approval` is success on the head (in addition to CodeQL); status still reaches the chat; no `[skip ci]` commit moves the head past the gate.
 
@@ -376,6 +381,6 @@ A new feature, driven entirely from a fresh claude.ai chat, results in:
 - **Live activation remaining:** **T8.5** 2-strike fail-over, **T8.6** engine switch (`ADLC_ENGINE=legacy`), **T8.7** iterate loop — not yet exercised live; **branch protection (§F)** still OFF (verified 404).
 - **Smoke validated (2026-06-22):** gh-aw generate happy-path proven end-to-end (issue #39 → PR #40 → live preview); 3 fixes landed (engine var, create-PR PAT, hook abspath). See §1c + `docs/superpowers/2026-06-22-ghaw-generate-smoke-outcome.md`.
 - **WS8 + WS9 — ✅ DONE + validated live (2026-06-25):** Orix `ai-dev/` standards integrated (controlled installs + mounted rules + allow-list gate + extended reviewer) and per-run `max-turns 50`. Proven on PR #51 (issue #50). See §4.
-- **WS10 — NEXT (scoped 2026-06-25):** enforce the **full merge gate** — decouple `status.json` from the PR branch so `CI — Node/React` + `adlc/business-approval` become required checks (today only CodeQL gates merge — drift-log D-8). Pairs with the distinct-bot-identity follow-up (D-7) for required *human* approval. See §4 WS10.
+- **WS10 — IMPLEMENTED (2026-06-25, `feature/ws10-merge-gate`; pending merge → validation → required-checks):** status decoupled from the PR branch to a single in-place PR comment (marker `<!-- adlc-status -->`); all `[skip ci]` head-movers rewired (incl. the legacy-generate `pr-open` the dep-map had missed). Remaining: merge → one test-generate → add `CI — Node/React` + `adlc/business-approval` to required checks → close drift-log D-8. Pairs with the distinct-bot-identity follow-up (D-7) for required *human* approval. See §4 WS10.
 - **Other open workstreams:** WS1 (vendor-sync bot); WS5 (`dependabot.yml` + secret-scan push-protection); WS7 real claude.ai run (MCP §C + upload `adlc-bootstrap`); WS8 ESLint-plugins fast-follow (JSDoc / no-inline-styles / unicorn).
 ```
