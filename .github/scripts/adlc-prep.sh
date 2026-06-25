@@ -95,7 +95,12 @@ import globals from 'globals';
 export default tseslint.config(
   { ignores: ['dist', 'coverage', '*.config.ts', 'eslint.config.mjs'] },
   js.configs.recommended, ...tseslint.configs.recommended,
-  { files: ['**/*.{ts,tsx}'], languageOptions: { globals: { ...globals.browser } } },
+  { files: ['**/*.{ts,tsx}'], languageOptions: { globals: { ...globals.browser } },
+    // WS8 Orix rule, hard-gated (measured): max file size 300 lines. The stricter Orix
+    // rules (<=40 lines/fn, no-magic-numbers, kebab-case, no inline styles) ride the
+    // generate prompt + the reviewer for now (eslint --max-warnings 0 has no advisory
+    // tier), and get promoted to hard lint once a real generate proves the agent complies.
+    rules: { 'max-lines': ['error', { max: 300, skipBlankLines: true, skipComments: true }] } },
 );
 EOF
   cat > "${ws}/index.html" <<EOF
@@ -123,11 +128,12 @@ EOF
   chmod +x .claude/hooks/pretooluse-deny.sh
   cp .adlc-standards/hooks/settings.template.json .claude/settings.json
   cp .adlc-standards/constitution.md ./constitution.md
-  cp -r .adlc-standards/steering ./steering
+  cp -r .adlc-standards/steering ./steering   # includes steering/approved-packages.json (WS8 allow-list)
+  cp -r .adlc-standards/ai-dev ./ai-dev        # WS8: Orix React + global standards the agent must follow
   cp .adlc-standards/vendor/spec-kit/templates/spec-template.md  .speckit/spec-template.md
   cp .adlc-standards/vendor/spec-kit/templates/plan-template.md  .speckit/plan-template.md
   cp .adlc-standards/vendor/spec-kit/templates/tasks-template.md .speckit/tasks-template.md
-  printf '%s\n' '.adlc-standards/' '.claude/' 'constitution.md' 'steering/' '.speckit/' >> .git/info/exclude
+  printf '%s\n' '.adlc-standards/' '.claude/' 'constitution.md' 'steering/' '.speckit/' 'ai-dev/' >> .git/info/exclude
 
   # --- status scaffolding, written but LEFT UNCOMMITTED (Fallback B = default) ---
   # The agent's single `git add "$ADLC_WORKSPACE"` will stage the scaffold + this

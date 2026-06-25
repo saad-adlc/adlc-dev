@@ -42,11 +42,12 @@ Only review PRs whose head branch starts with `feature/issue-`. If it does not, 
 ## Steps
 
 1. Read the PR diff (changed files under `workspaces/<slug>/`).
-2. Read the standards from the repo: `constitution.md`, `steering/compliance-rules.md`, and `skills/review-agent-governance/SKILL.md`.
+2. Read the standards from the repo: `constitution.md`, `steering/compliance-rules.md`, `steering/approved-packages.json` (the package allow-list), the **Orix rules** `ai-dev/rules/react/style.md` + `ai-dev/rules/global/behavior.md`, and `skills/review-agent-governance/SKILL.md`.
 3. Review the diff against those rules:
    - **Scope** — changes stay inside the target `workspaces/<slug>/`; no edits to workflows, root config, or other workspaces.
    - **Security** — no hardcoded secrets/keys/tokens; no `eval`; input validation where applicable.
-   - **Approved stack** — only React + TypeScript + Vite + Vitest; no banned packages.
+   - **Approved packages** — every direct dependency in `package.json` is on the allow-list (`steering/approved-packages.json`); no banned (`moment`, full `lodash`) or unlisted package. (`adlc-ci` also gates this deterministically.)
+   - **Orix style (advisory)** — flag violations of `ai-dev/rules/react/style.md`: non-kebab-case filenames, missing JSDoc on exported functions, functions >40 lines, inline styles (should be CSS Modules), `as any` without an explanatory comment, commented-out code, and API calls that don't handle loading/error/success. React Query for server state, Zustand for client state.
    - **Tests** — tests exist and map to acceptance criteria; coverage respected; no deleted/weakened tests.
    - **Spec fidelity** — the diff implements the spec/plan/tasks and nothing out of scope.
 
