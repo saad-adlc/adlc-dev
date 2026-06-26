@@ -1,5 +1,7 @@
 # ADLC — Infra Setup Runbook
 
+> 🧭 **Migrating to a clean org (e.g. `orix`)?** Use **`MIGRATION-RUNBOOK.md`** — it consolidates this file plus WS10 (the merge gate), WS11 (metrics / ADX), and the owner-rename + lock-recompile step a plain clone misses. This file remains the in-place `saad-adlc` reference.
+
 > Manual, click-and-paste steps **you** perform (GitHub settings, secrets, claude.ai, local CLI). Companion to `PLAN.md`. Steps are grouped and ordered; each ends with a **Verify** line. Org/repo: `saad-adlc/adlc-dev` (workspace) + `saad-adlc/adlc-standards` (source of truth).
 
 **Legend:** 🖱️ = GitHub web UI · 💻 = terminal (run from the repo) · ☁️ = claude.ai web.
