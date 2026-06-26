@@ -1,0 +1,1 @@
+{"schema_version":"1","event_type":"pipeline_run","ts":"2026-06-26T08:37:20Z","feature_key":65,"slug":"issue-65-hello-world-v2","phase":"iterate","run_id":"28227034606","engine":"hand-rolled","model":"claude-sonnet-4-6","tokens_effective":0,"credits":0,"conclusion":"skipped","iteration_n":0,"duration_s":8}
