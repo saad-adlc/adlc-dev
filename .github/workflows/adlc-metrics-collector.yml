@@ -21,11 +21,9 @@ permissions:
   contents: write     # write the `metrics` branch
   actions: read       # download the source run's usage artifact (tokens)
 
-# Share the writer lock with the harvester so metrics-branch writes never push-race.
-concurrency:
-  group: adlc-metrics
-  cancel-in-progress: false
-
+# No concurrency group: each run writes a UNIQUE file (run-<id>.jsonl), so parallel
+# collectors don't collide; metrics-sink.sh retries on branch contention. (A shared
+# group here cancelled superseded queued runs and dropped their events — caught live.)
 jobs:
   collect:
     runs-on: ubuntu-latest
@@ -69,13 +67,17 @@ jobs:
           U=$(date -u -d "$WF_UPDATED" +%s 2>/dev/null || echo 0)
           DUR=$(( U - C )); [ "$DUR" -lt 0 ] && DUR=0
 
-          # TOKENS / CREDITS — Phase-1 placeholder (default 0).
-          # CALIBRATION TODO: for the model phases (generate/iterate), download the source
-          # run's gh-aw usage artifact and parse effective tokens + credits here. Kept at 0
-          # until calibrated against a real gh-aw run so a missing/renamed artifact never
-          # breaks the emit. (Agent-created PRs do not trigger gh-aw, so calibrate on a
-          # user/pipeline-driven generate run.)
+          # TOKENS / CREDITS — for gh-aw runs, sum the run's `usage` artifact
+          # (*/token_usage.jsonl: input+output tokens + ai_credits). metrics-tokens.sh fails
+          # soft to "0 0", so a missing/renamed artifact never breaks the emit. Non-gh-aw
+          # engines have no such artifact and stay 0 (hand-rolled iterate/legacy + the
+          # review agent are not captured here yet — that's a Phase-2 follow-on).
           TOKENS=0; CREDITS=0
+          if [ "$ENGINE" = "gh-aw" ]; then
+            TC="$(bash .github/scripts/metrics-tokens.sh "$WF_RUN_ID" || echo '0 0')"
+            TOKENS="${TC%% *}"; CREDITS="${TC##* }"
+            echo "metrics-collector: gh-aw run tokens=$TOKENS credits=$CREDITS"
+          fi
 
           MX_EVENT_TYPE=pipeline_run \
           MX_FEATURE_KEY="$FKEY" MX_SLUG="$SLUG" MX_PHASE="$PHASE" \

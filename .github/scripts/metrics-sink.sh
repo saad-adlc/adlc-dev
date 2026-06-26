@@ -29,13 +29,23 @@ done <<< "$DATA"
 PATH_IN_REPO="${DIR}/${KEY}.jsonl"
 B64="$(printf '%s\n' "$DATA" | base64 | tr -d '\n')"   # base64 -w0 is GNU-only; tr unwraps portably
 
-if gh api --method PUT "repos/${REPO}/contents/${PATH_IN_REPO}" \
-     -f message="metrics: ${KEY}" \
-     -f branch="${BRANCH}" \
-     -f content="${B64}" >/dev/null 2>/tmp/metrics-sink.err; then
-  echo "metrics-sink: wrote ${PATH_IN_REPO} on ${BRANCH}" >&2
-else
-  echo "metrics-sink: PUT failed (does the '${BRANCH}' branch exist? create it once as an empty orphan)" >&2
-  cat /tmp/metrics-sink.err >&2 || true
-  exit 2
-fi
+# Retry the PUT: unique paths never collide on content, but concurrent writers race the
+# branch HEAD (409). A short backoff resolves it — so collectors run in parallel (no
+# concurrency group, no dropped runs) and serialize only here, on contention.
+attempt=0
+while :; do
+  attempt=$((attempt + 1))
+  if gh api --method PUT "repos/${REPO}/contents/${PATH_IN_REPO}" \
+       -f message="metrics: ${KEY}" \
+       -f branch="${BRANCH}" \
+       -f content="${B64}" >/dev/null 2>/tmp/metrics-sink.err; then
+    echo "metrics-sink: wrote ${PATH_IN_REPO} on ${BRANCH} (attempt ${attempt})" >&2
+    break
+  fi
+  if [ "$attempt" -ge 5 ]; then
+    echo "metrics-sink: PUT failed after ${attempt} attempts (does '${BRANCH}' exist as an empty orphan branch?)" >&2
+    cat /tmp/metrics-sink.err >&2 || true
+    exit 2
+  fi
+  sleep $(( attempt * 2 ))   # backoff 2,4,6,8s for branch contention
+done
