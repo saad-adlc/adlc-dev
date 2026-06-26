@@ -1,0 +1,86 @@
+# WS11 — Metrics Collector (Phase 1)
+# Fires after each ADLC workflow completes and emits one pipeline_run event
+# (feature, phase, conclusion, duration, tokens) to the `metrics` branch.
+# Central + non-invasive: it reads the completed run from the workflow_run payload,
+# so neither the compiled gh-aw lock nor any workflow needs an emit step of its own.
+#
+# Prerequisite: the `metrics` branch must exist (see adlc-metrics-harvest.yml header).
+name: ADLC — Metrics Collector
+
+on:
+  workflow_run:
+    workflows:
+      - "ADLC Generate"
+      - "ADLC — Generate Feature"
+      - "ADLC — CI"
+      - "ADLC — Iterate"
+      - "ADLC — Preview Deploy"
+    types: [completed]
+
+permissions:
+  contents: write     # write the `metrics` branch
+  actions: read       # download the source run's usage artifact (tokens)
+
+# Share the writer lock with the harvester so metrics-branch writes never push-race.
+concurrency:
+  group: adlc-metrics
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Emit pipeline_run event -> metrics branch
+        env:
+          GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          MX_SINK: stdout
+          WF_NAME: ${{ github.event.workflow_run.name }}
+          WF_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          WF_RUN_ID: ${{ github.event.workflow_run.id }}
+          WF_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          WF_CREATED: ${{ github.event.workflow_run.created_at }}
+          WF_UPDATED: ${{ github.event.workflow_run.updated_at }}
+        run: |
+          set -euo pipefail
+
+          # Only ADLC feature runs carry a feature_key; skip everything else.
+          case "$WF_BRANCH" in
+            feature/issue-*) ;;
+            *) echo "metrics-collector: '$WF_BRANCH' is not an ADLC feature branch — skip"; exit 0 ;;
+          esac
+
+          FKEY="$(printf '%s' "$WF_BRANCH" | sed -E 's#^feature/issue-([0-9]+)-.*#\1#')"
+          SLUG="${WF_BRANCH#feature/}"
+
+          # Map the source workflow to a phase + which engine/model (if any) it used.
+          case "$WF_NAME" in
+            "ADLC Generate")           PHASE=generate; ENGINE=gh-aw;       MODEL=claude-sonnet-4-6 ;;
+            "ADLC — Generate Feature") PHASE=generate; ENGINE=legacy;      MODEL=claude-sonnet-4-6 ;;
+            "ADLC — Iterate")          PHASE=iterate;  ENGINE=hand-rolled; MODEL=claude-sonnet-4-6 ;;
+            "ADLC — CI")               PHASE=ci;       ENGINE=ci;          MODEL="" ;;
+            "ADLC — Preview Deploy")   PHASE=preview;  ENGINE=ci;          MODEL="" ;;
+            *)                         PHASE=other;    ENGINE=other;       MODEL="" ;;
+          esac
+
+          # Duration from the run window (GNU date on the runner).
+          C=$(date -u -d "$WF_CREATED" +%s 2>/dev/null || echo 0)
+          U=$(date -u -d "$WF_UPDATED" +%s 2>/dev/null || echo 0)
+          DUR=$(( U - C )); [ "$DUR" -lt 0 ] && DUR=0
+
+          # TOKENS / CREDITS — Phase-1 placeholder (default 0).
+          # CALIBRATION TODO: for the model phases (generate/iterate), download the source
+          # run's gh-aw usage artifact and parse effective tokens + credits here. Kept at 0
+          # until calibrated against a real gh-aw run so a missing/renamed artifact never
+          # breaks the emit. (Agent-created PRs do not trigger gh-aw, so calibrate on a
+          # user/pipeline-driven generate run.)
+          TOKENS=0; CREDITS=0
+
+          MX_EVENT_TYPE=pipeline_run \
+          MX_FEATURE_KEY="$FKEY" MX_SLUG="$SLUG" MX_PHASE="$PHASE" \
+          MX_RUN_ID="$WF_RUN_ID" MX_ENGINE="$ENGINE" MX_MODEL="$MODEL" \
+          MX_TOKENS="$TOKENS" MX_CREDITS="$CREDITS" MX_CONCLUSION="$WF_CONCLUSION" \
+          MX_DURATION="$DUR" MX_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+          bash .github/scripts/metrics-emit.sh \
+            | bash .github/scripts/metrics-sink.sh "run-${WF_RUN_ID}"
