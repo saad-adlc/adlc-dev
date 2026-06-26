@@ -21,11 +21,9 @@ permissions:
   contents: write     # write the `metrics` branch
   actions: read       # download the source run's usage artifact (tokens)
 
-# Share the writer lock with the harvester so metrics-branch writes never push-race.
-concurrency:
-  group: adlc-metrics
-  cancel-in-progress: false
-
+# No concurrency group: each run writes a UNIQUE file (run-<id>.jsonl), so parallel
+# collectors don't collide; metrics-sink.sh retries on branch contention. (A shared
+# group here cancelled superseded queued runs and dropped their events — caught live.)
 jobs:
   collect:
     runs-on: ubuntu-latest

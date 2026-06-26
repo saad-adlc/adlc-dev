@@ -16,11 +16,8 @@ permissions:
   contents: write          # write the `metrics` branch
   pull-requests: read
 
-# Serialize all metrics-branch writers so unique-path files never push-race.
-concurrency:
-  group: adlc-metrics
-  cancel-in-progress: false
-
+# No concurrency group needed: unique-path writes + metrics-sink.sh retry handle any
+# branch contention without cancelling/dropping runs.
 jobs:
   harvest:
     runs-on: ubuntu-latest
