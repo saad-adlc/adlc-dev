@@ -1,0 +1,38 @@
+# WS11 — Metrics Harvest (Phase 1)
+# Snapshots cross-run feature state (open/merged PRs, LOC, approval, age) on a schedule
+# and writes feature_snapshot events to the `metrics` branch. Read-only against PRs.
+#
+# Prerequisite (one-time): create an empty `metrics` branch to hold the JSONL store, e.g.
+#   git switch --orphan metrics && git commit --allow-empty -m "init metrics" && git push -u origin metrics
+# Phase 2 swaps metrics-sink.sh for an ADX ingest; this workflow is unchanged.
+name: ADLC — Metrics Harvest
+
+on:
+  schedule:
+    - cron: '17 * * * *'   # hourly (offset off the hour)
+  workflow_dispatch: {}
+
+permissions:
+  contents: write          # write the `metrics` branch
+  pull-requests: read
+
+# Serialize all metrics-branch writers so unique-path files never push-race.
+concurrency:
+  group: adlc-metrics
+  cancel-in-progress: false
+
+jobs:
+  harvest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Harvest feature snapshots -> metrics branch
+        env:
+          GH_TOKEN: ${{ secrets.ADLC_AGENT_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          MX_SINK: stdout
+        run: |
+          # metrics-harvest.sh emits feature_snapshot JSONL on stdout; metrics-sink.sh
+          # publishes it to the metrics branch under a run-unique filename.
+          bash .github/scripts/metrics-harvest.sh \
+            | bash .github/scripts/metrics-sink.sh "snapshots-${{ github.run_id }}"
