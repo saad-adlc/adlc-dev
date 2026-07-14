@@ -1,0 +1,125 @@
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+}
+
+.backBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: #1e88e5;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.backBtn:hover {
+  background: #eff6ff;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.mapWrapper {
+  width: 100%;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 0;
+}
+
+.highlights {
+  margin: 0;
+  color: #374151;
+  font-size: 0.95rem;
+  font-style: italic;
+}
+
+.stats {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+.chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 16px;
+  background: #f3f4f6;
+  font-size: 0.82rem;
+  border: 1px solid #e5e7eb;
+}
+
+.sectionHeading {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.directions {
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.startEnd {
+  margin: 4px 0;
+  font-size: 0.88rem;
+}
+
+.stepList {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.step {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  margin-bottom: 4px;
+  color: #374151;
+}
+
+.reactions {
+  display: flex;
+}
+
+.divider {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 0;
+}
+
+.openForm {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px dashed #93c5fd;
+  background: #eff6ff;
+  color: #1d4ed8;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  align-self: flex-start;
+}
