@@ -1,0 +1,46 @@
+.page {
+  padding: 2rem;
+  max-width: 720px;
+}
+
+.heading {
+  font-size: 1.75rem;
+  color: #e2e8f0;
+  margin-bottom: 1.5rem;
+}
+
+.chartHeading {
+  font-size: 1.1rem;
+  color: #a8b2d8;
+  margin-top: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.stats {
+  display: flex;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  background: #16213e;
+  padding: 1.25rem 2rem;
+  border-radius: 8px;
+  min-width: 160px;
+}
+
+.statLabel {
+  font-size: 0.85rem;
+  color: #a8b2d8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.statValue {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #64ffda;
+}
