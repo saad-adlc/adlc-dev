@@ -1,0 +1,124 @@
+.panel {
+  background: #fff;
+  border: 1px solid #dde1e7;
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 680px;
+}
+
+.heading {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 20px;
+}
+
+.summary {
+  margin-bottom: 24px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 16px;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 0.95rem;
+  color: #374151;
+}
+
+.section {
+  margin-bottom: 20px;
+}
+
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #1f2937;
+  margin-bottom: 8px;
+}
+
+.bracketTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.bracketTable th {
+  text-align: right;
+  padding: 4px 8px;
+  color: #6b7280;
+  font-weight: 500;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.bracketTable th:first-child {
+  text-align: left;
+}
+
+.bracketTable td {
+  text-align: right;
+  padding: 4px 8px;
+  color: #374151;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.bracketTable td:first-child {
+  text-align: left;
+}
+
+.totals {
+  border-top: 2px solid #1a56db;
+  padding-top: 12px;
+  margin-bottom: 24px;
+  font-weight: 700;
+  font-size: 1rem;
+  color: #111827;
+}
+
+.takeHome {
+  background: #f0f4ff;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.takeHomeHeading {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1a56db;
+  margin: 0 0 16px;
+}
+
+.takeHomeGrid {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.takeHomeItem {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 140px;
+}
+
+.takeHomeLabel {
+  font-size: 0.8rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.takeHomeSubLabel {
+  font-size: 0.75rem;
+  color: #9ca3af;
+}
+
+.takeHomeValue {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #111827;
+  margin-top: 4px;
+}
