@@ -1,0 +1,56 @@
+.card {
+  display: flex;
+  gap: 1rem;
+  background: #fff;
+  border-radius: 12px;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  cursor: pointer;
+  border: 1px solid #e2e8f0;
+  transition: box-shadow 0.15s;
+  text-align: left;
+  width: 100%;
+  font-family: inherit;
+}
+
+.card:hover,
+.card:focus-visible {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  outline: 2px solid #3b82f6;
+}
+
+.thumbnail {
+  flex-shrink: 0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.info {
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  margin: 0 0 0.2rem;
+  font-size: 1.05rem;
+  color: #1a1a2e;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meta {
+  color: #6b7280;
+  font-size: 0.85rem;
+  margin: 0 0 0.2rem;
+}
+
+.stats {
+  color: #374151;
+  font-size: 0.9rem;
+  margin: 0 0 0.4rem;
+}
+
+.reactions {
+  margin-top: 0.5rem;
+}
